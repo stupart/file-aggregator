@@ -18,56 +18,163 @@ import {
     CircularProgress,
     Tooltip,
     Snackbar,
+    Paper,
 } from '@mui/material';
+import BlockIcon from '@mui/icons-material/Block';
 import SettingsIcon from '@mui/icons-material/Settings';
 import EditIcon from '@mui/icons-material/Edit';
 import { TreeView, TreeItem } from '@mui/x-tree-view';
-import { FileNode, ExclusionConfig } from './types';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import SaveIcon from '@mui/icons-material/Save';
 
-const DEFAULT_EXCLUSION_CONFIG: ExclusionConfig = {
-    paths: ['package-lock.json'],
-    patterns: ['*.log', '.DS_Store'],
-    autoExcludeContents: ['node_modules', 'build', 'dist']
-};
+import { 
+    FileNode, 
+    ExclusionConfig, 
+    UserConfig, 
+    SharePreset,
+    ProjectContext
+} from './types';
+
+import { DEFAULT_EXCLUSIONS, DEFAULT_USER_CONFIG } from './constants/defaults';
+import { loadAndMergeConfigs, addRecentProject } from './utils/config';
+
+interface AppState {
+    structure: FileNode | null;
+    selectedFiles: Set<string>;
+    projectRoot: string;
+    exclusionConfig: ExclusionConfig;
+    userConfig: UserConfig;
+    activePreset: string | null;
+    projectContext: ProjectContext | null;
+}
 
 const App: React.FC = () => {
+    // Base state
     const [structure, setStructure] = useState<FileNode | null>(null);
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
     const [projectRoot, setProjectRoot] = useState<string>('');
-    const [exclusionConfig, setExclusionConfig] = useState<ExclusionConfig>(DEFAULT_EXCLUSION_CONFIG);
-    const [configDialogOpen, setConfigDialogOpen] = useState(false);
+    
+    // Configurations
+    const [exclusionConfig, setExclusionConfig] = useState<ExclusionConfig>(DEFAULT_EXCLUSIONS);
+    const [userConfig, setUserConfig] = useState<UserConfig>(DEFAULT_USER_CONFIG);
+    const [activePreset, setActivePreset] = useState<string | null>(null);
+    const [presets, setPresets] = useState<SharePreset[]>([]);
     const [newExclusion, setNewExclusion] = useState('');
+
+    // Project info
+    const [projectContext, setProjectContext] = useState<ProjectContext | null>(null);
+    
+    // UI state
+    const [configDialogOpen, setConfigDialogOpen] = useState(false);
+    const [presetDialogOpen, setPresetDialogOpen] = useState(false);
     const [loadingFiles, setLoadingFiles] = useState<Set<string>>(new Set());
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [generatedContent, setGeneratedContent] = useState<string>('');
 
 
+    // Load configurations on mount
     useEffect(() => {
-        loadConfig();
+        loadInitialConfig();
     }, []);
 
-    const loadConfig = async () => {
+    const loadInitialConfig = async () => {
         try {
-            const config = await window.electronAPI.loadConfig();
-            setExclusionConfig(config);
+            const { exclusions, userConfig } = await loadAndMergeConfigs();
+            setExclusionConfig(exclusions);
+            setUserConfig(userConfig);
+            
+            // Set active preset if there was a last used one
+            if (userConfig.lastUsedPreset) {
+                setActivePreset(userConfig.lastUsedPreset);
+            }
         } catch (error) {
-            setExclusionConfig(DEFAULT_EXCLUSION_CONFIG);
+            console.error('Failed to load configurations:', error);
+            showSnackbar('Failed to load settings. Using defaults.');
         }
     };
 
-    const saveConfig = async (config: ExclusionConfig) => {
-        await window.electronAPI.saveConfig(config);
-        setExclusionConfig(config);
+    const handleCheckboxChange = (node: FileNode, checked: boolean) => {
+        const newSelected = new Set(selectedFiles);
+        const affectedPaths = getAllDescendantPaths(node);
+    
+        affectedPaths.forEach(path => {
+            // Get the node for this path
+            const pathNode = findNodeByPath(structure!, path);
+            if (!pathNode) return;
+    
+            // Check if this node is excluded
+            const isExcluded = 
+                exclusionConfig.global.files.includes(pathNode.name) ||
+                exclusionConfig.global.folders.includes(pathNode.name);
+    
+            // Only allow selection of non-excluded files
+            if (checked && !isExcluded) {
+                newSelected.add(path);
+            } else {
+                newSelected.delete(path);
+            }
+        });
+    
+        setSelectedFiles(newSelected);
+    };
+    
+    // Helper function to find a node by path
+    const findNodeByPath = (root: FileNode, searchPath: string): FileNode | null => {
+        if (root.path === searchPath) return root;
+        if (!root.children) return null;
+        
+        for (const child of root.children) {
+            const found = findNodeByPath(child, searchPath);
+            if (found) return found;
+        }
+        
+        return null;
     };
 
-    // Get relative path from project root
+    const handleFolderSelect = async () => {
+        const folderPath = await window.electronAPI.selectFolder();
+        if (folderPath) {
+            setProjectRoot(folderPath);
+            try {
+                // Scan directory
+                const fileStructure = await window.electronAPI.scanDirectory(folderPath);
+                setStructure(fileStructure);
+
+                // Add to recent projects
+                await addRecentProject(folderPath);
+
+                // Analyze project context
+                const context = await window.electronAPI.analyzeProject(folderPath);
+                setProjectContext(context);
+
+                // Suggest preset based on project type
+                const presets = await window.electronAPI.loadPresets();
+                const matchingPreset = presets.find(p => p.id.startsWith(context.stack.type));
+                if (matchingPreset) {
+                    setActivePreset(matchingPreset.id);
+                    setExclusionConfig(matchingPreset.exclusions);
+                }
+
+                showSnackbar('Project loaded successfully');
+            } catch (error) {
+                console.error('Failed to load project:', error);
+                showSnackbar('Failed to load project completely');
+            }
+        }
+    };
+
+    const showSnackbar = (message: string) => {
+        setSnackbarMessage(message);
+        setSnackbarOpen(true);
+    };
+    
     const getRelativePath = (fullPath: string) => {
         return fullPath.replace(projectRoot, '').replace(/^\//, '');
     };
-
-    // Recursive function to get all descendant paths
+    
     const getAllDescendantPaths = (node: FileNode): string[] => {
         let paths: string[] = [node.path];
         if (node.children) {
@@ -78,106 +185,91 @@ const App: React.FC = () => {
         return paths;
     };
 
-    const handleCheckboxChange = (node: FileNode, checked: boolean) => {
-        const newSelected = new Set(selectedFiles);
-        const affectedPaths = getAllDescendantPaths(node);
-
-        affectedPaths.forEach(path => {
-            // Don't auto-select excluded files when selecting a parent
-            const shouldExclude = exclusionConfig.paths.includes(node.name) ||
-                                exclusionConfig.patterns.some(pattern => 
-                                    new RegExp('^' + pattern.replace('*', '.*') + '$').test(node.name));
-            
-            if (checked) {
-                if (node.path === path || !shouldExclude) {
-                    newSelected.add(path);
-                }
-            } else {
-                newSelected.delete(path);
-            }
-        });
-
-        setSelectedFiles(newSelected);
+    const handleEditPreset = (preset: SharePreset) => {
+        // TODO: Implement preset editing
+        console.log('Editing preset:', preset);
     };
-
-    const handleFolderSelect = async () => {
-        const folderPath = await window.electronAPI.selectFolder();
-        if (folderPath) {
-            setProjectRoot(folderPath);
-            const fileStructure = await window.electronAPI.scanDirectory(folderPath);
-            setStructure(fileStructure);
+    
+    const handlePresetSelect = (presetId: string) => {
+        setActivePreset(presetId);
+        const selectedPreset = presets.find(p => p.id === presetId);
+        if (selectedPreset) {
+            setExclusionConfig(selectedPreset.exclusions);
         }
     };
-
-    const getAllSelectedNodes = (node: FileNode): FileNode[] => {
-        let selected: FileNode[] = [];
-        if (selectedFiles.has(node.path)) {
-            selected.push(node);
-        }
-        if (node.children) {
-            node.children.forEach(child => {
-                selected = [...selected, ...getAllSelectedNodes(child)];
-            });
-        }
-        return selected;
+    
+    const handleCreatePreset = () => {
+        // TODO: Implement preset creation
+        console.log('Creating new preset');
     };
 
-    const handleExport = async () => {
-        if (!structure) return;
-        
-        try {
-            setLoadingFiles(new Set(selectedFiles)); // Start loading state
-            const selectedNodes = getAllSelectedNodes(structure);
-            const content = await aggregateContent(selectedNodes);
-            setGeneratedContent(content); // Store the generated content
-            
-            const savedPath = await window.electronAPI.exportFiles(content, projectRoot.split('/').pop() || 'export');
-            
-            if (savedPath) {
-                showSnackbar(`File saved successfully to ${savedPath}`);
-            }
-        } catch (error) {
-            console.error('Export failed:', error);
-            showSnackbar('Failed to export files. Please try again.');
-        } finally {
-            setLoadingFiles(new Set()); // Clear loading state
-        }
+    const handleRemoveGlobalExclusion = (type: 'files' | 'folders', index: number) => {
+        const newConfig = { ...exclusionConfig };
+        newConfig.global[type] = newConfig.global[type].filter((_, i) => i !== index);
+        setExclusionConfig(newConfig);
     };
-
-    const handleCopyToClipboard = async () => {
-        if (!generatedContent) {
-            const selectedNodes = getAllSelectedNodes(structure!);
-            setLoadingFiles(new Set(selectedFiles));
-            const content = await aggregateContent(selectedNodes);
-            setGeneratedContent(content);
-            setLoadingFiles(new Set());
+    
+    const handleRemoveSessionExclusion = (type: 'files' | 'folders', index: number) => {
+        const newConfig = { ...exclusionConfig };
+        newConfig.session[type] = newConfig.session[type].filter((_, i) => i !== index);
+        setExclusionConfig(newConfig);
+    };
+    
+    const handleRemoveBehavior = (type: keyof ExclusionConfig['behaviors'], index: number) => {
+        const newConfig = { ...exclusionConfig };
+        newConfig.behaviors[type] = newConfig.behaviors[type].filter((_, i) => i !== index);
+        setExclusionConfig(newConfig);
+    };
+    
+    const handleAddExclusion = () => {
+        if (!newExclusion) return;
+    
+        const newConfig = { ...exclusionConfig };
+        if (newExclusion.includes('*')) {
+            newConfig.global.files.push(newExclusion);
+        } else if (newExclusion.endsWith('/')) {
+            newConfig.global.folders.push(newExclusion.slice(0, -1));
+        } else {
+            newConfig.global.files.push(newExclusion);
         }
         
-        try {
-            await navigator.clipboard.writeText(generatedContent);
-            showSnackbar('Content copied to clipboard!');
-        } catch (error) {
-            showSnackbar('Failed to copy to clipboard');
-        }
+        setExclusionConfig(newConfig);
+        setNewExclusion('');
     };
-
-    const showSnackbar = (message: string) => {
-        setSnackbarMessage(message);
-        setSnackbarOpen(true);
-    };
-
 
     const aggregateContent = async (nodes: FileNode[]): Promise<string> => {
         const projectName = projectRoot.split('/').pop() || 'project';
         let output = `<${projectName}>\n\n`;
         
-        // Add directory structure
+        // Add project context if available
+        if (projectContext) {
+            output += `<project-info>\n`;
+            output += `Type: ${projectContext.stack.type}\n`;
+            output += `Framework: ${projectContext.stack.framework.join(', ')}\n`;
+            output += `Language: ${projectContext.stack.language}\n`;
+            output += `Testing: ${projectContext.stack.testing.join(', ')}\n`;
+            output += `Styling: ${projectContext.stack.styling.join(', ')}\n`;
+            if (projectContext.description) {
+                output += `\nDescription: ${projectContext.description}\n`;
+            }
+            output += `</project-info>\n\n`;
+        }
+        
+        // Add directory structure (only showing included files)
         output += "<file-tree>\n";
         const addStructure = (node: FileNode, depth: number = 0) => {
-            const relativePath = getRelativePath(node.path);
-            output += `${' '.repeat(depth)}${relativePath}${node.isDirectory ? '/' : ''}\n`;
-            if (node.children) {
-                node.children.forEach(child => addStructure(child, depth + 2));
+            // Skip excluded files/folders in the tree view
+            const isExcluded = 
+                exclusionConfig.global.files.includes(node.name) ||
+                exclusionConfig.global.folders.includes(node.name);
+            
+            if (!isExcluded) {
+                const relativePath = getRelativePath(node.path);
+                output += `${' '.repeat(depth)}${relativePath}${node.isDirectory ? '/' : ''}\n`;
+                
+                if (node.children && !exclusionConfig.behaviors.hideContents.includes(node.name)) {
+                    node.children.forEach(child => addStructure(child, depth + 2));
+                }
             }
         };
         
@@ -186,8 +278,15 @@ const App: React.FC = () => {
         }
         output += "</file-tree>\n\n";
         
-        // Add file contents
-        for (const node of nodes) {
+        // Add file contents (only for selected and included files)
+        const selectedNodes = nodes.filter(node => {
+            const isExcluded = 
+                exclusionConfig.global.files.includes(node.name) ||
+                exclusionConfig.global.folders.includes(node.name);
+            return !isExcluded;
+        });
+    
+        for (const node of selectedNodes) {
             if (!node.isDirectory) {
                 const relativePath = getRelativePath(node.path);
                 output += `<${node.name}>\n`;
@@ -212,56 +311,97 @@ const App: React.FC = () => {
         return output;
     };
 
+    const renderPresetDialog = () => (
+        <Dialog open={presetDialogOpen} onClose={() => setPresetDialogOpen(false)}>
+            <DialogTitle>Manage Presets</DialogTitle>
+            <DialogContent>
+                <Box sx={{ mb: 2 }}>
+                    <Typography variant="subtitle1">Available Presets</Typography>
+                    <List>
+                        {presets.map((preset) => (
+                            <ListItem
+                                key={preset.id}
+                                secondaryAction={
+                                    <IconButton 
+                                        edge="end" 
+                                        onClick={() => handleEditPreset(preset)}
+                                    >
+                                        <EditIcon />
+                                    </IconButton>
+                                }
+                            >
+                                <ListItemText
+                                    primary={preset.name}
+                                    secondary={preset.description}
+                                />
+                                <Checkbox
+                                    checked={activePreset === preset.id}
+                                    onChange={() => handlePresetSelect(preset.id)}
+                                />
+                            </ListItem>
+                        ))}
+                    </List>
+                </Box>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={() => handleCreatePreset()}>Create New</Button>
+                <Button onClick={() => setPresetDialogOpen(false)}>Close</Button>
+            </DialogActions>
+        </Dialog>
+    );
+
     const renderExclusionDialog = () => (
         <Dialog open={configDialogOpen} onClose={() => setConfigDialogOpen(false)}>
             <DialogTitle>Exclusion Settings</DialogTitle>
             <DialogContent>
                 <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle1">Excluded Files/Paths</Typography>
+                    <Typography variant="subtitle1">Global Exclusions</Typography>
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                        {exclusionConfig.paths.map((path, index) => (
+                        {exclusionConfig.global.files.map((file, index) => (
                             <Chip
-                                key={path}
-                                label={path}
-                                onDelete={() => {
-                                    const newConfig = {...exclusionConfig};
-                                    newConfig.paths = newConfig.paths.filter((_, i) => i !== index);
-                                    saveConfig(newConfig);
-                                }}
+                                key={file}
+                                label={file}
+                                onDelete={() => handleRemoveGlobalExclusion('files', index)}
                             />
                         ))}
-                    </Box>
-                </Box>
-
-                <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle1">Excluded Patterns</Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                        {exclusionConfig.patterns.map((pattern, index) => (
-                            <Chip
-                                key={pattern}
-                                label={pattern}
-                                onDelete={() => {
-                                    const newConfig = {...exclusionConfig};
-                                    newConfig.patterns = newConfig.patterns.filter((_, i) => i !== index);
-                                    saveConfig(newConfig);
-                                }}
-                            />
-                        ))}
-                    </Box>
-                </Box>
-
-                <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle1">Auto-Exclude Contents</Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                        {exclusionConfig.autoExcludeContents.map((folder, index) => (
+                        {exclusionConfig.global.folders.map((folder, index) => (
                             <Chip
                                 key={folder}
-                                label={folder}
-                                onDelete={() => {
-                                    const newConfig = {...exclusionConfig};
-                                    newConfig.autoExcludeContents = newConfig.autoExcludeContents.filter((_, i) => i !== index);
-                                    saveConfig(newConfig);
-                                }}
+                                label={`${folder}/`}
+                                onDelete={() => handleRemoveGlobalExclusion('folders', index)}
+                            />
+                        ))}
+                    </Box>
+                </Box>
+
+                <Box sx={{ mb: 2 }}>
+                    <Typography variant="subtitle1">Session Exclusions</Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                        {exclusionConfig.session.files.map((file, index) => (
+                            <Chip
+                                key={file}
+                                label={file}
+                                onDelete={() => handleRemoveSessionExclusion('files', index)}
+                            />
+                        ))}
+                        {exclusionConfig.session.folders.map((folder, index) => (
+                            <Chip
+                                key={folder}
+                                label={`${folder}/`}
+                                onDelete={() => handleRemoveSessionExclusion('folders', index)}
+                            />
+                        ))}
+                    </Box>
+                </Box>
+
+                <Box sx={{ mb: 2 }}>
+                    <Typography variant="subtitle1">Folder Behaviors</Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                        {exclusionConfig.behaviors.hideContents.map((folder, index) => (
+                            <Chip
+                                key={folder}
+                                label={`${folder} (contents hidden)`}
+                                onDelete={() => handleRemoveBehavior('hideContents', index)}
                             />
                         ))}
                     </Box>
@@ -276,20 +416,7 @@ const App: React.FC = () => {
                     />
                     <Button
                         variant="contained"
-                        onClick={() => {
-                            if (newExclusion) {
-                                const newConfig = {...exclusionConfig};
-                                if (newExclusion.includes('*')) {
-                                    newConfig.patterns.push(newExclusion);
-                                } else if (newExclusion.endsWith('/')) {
-                                    newConfig.autoExcludeContents.push(newExclusion.slice(0, -1));
-                                } else {
-                                    newConfig.paths.push(newExclusion);
-                                }
-                                saveConfig(newConfig);
-                                setNewExclusion('');
-                            }
-                        }}
+                        onClick={handleAddExclusion}
                     >
                         Add
                     </Button>
@@ -301,6 +428,98 @@ const App: React.FC = () => {
         </Dialog>
     );
 
+    const handleExport = async () => {
+        if (!structure) return;
+        
+        try {
+            setLoadingFiles(new Set(selectedFiles));
+            const selectedNodes = getAllSelectedNodes(structure);
+            const content = await aggregateContent(selectedNodes);
+            setGeneratedContent(content);
+            
+            const savedPath = await window.electronAPI.exportFiles(
+                content, 
+                projectRoot.split('/').pop() || 'export'
+            );
+            
+            if (savedPath) {
+                showSnackbar(`File saved successfully to ${savedPath}`);
+            }
+        } catch (error) {
+            console.error('Export failed:', error);
+            showSnackbar('Failed to export files. Please try again.');
+        } finally {
+            setLoadingFiles(new Set());
+        }
+    };
+    
+    const handleCopyToClipboard = async () => {
+        if (!structure || !generatedContent) {
+            const selectedNodes = getAllSelectedNodes(structure!);
+            setLoadingFiles(new Set(selectedFiles));
+            const content = await aggregateContent(selectedNodes);
+            setGeneratedContent(content);
+            setLoadingFiles(new Set());
+        }
+        
+        try {
+            await navigator.clipboard.writeText(generatedContent);
+            showSnackbar('Content copied to clipboard!');
+        } catch (error) {
+            showSnackbar('Failed to copy to clipboard');
+        }
+    };
+    
+    const getAllSelectedNodes = (node: FileNode): FileNode[] => {
+        let selected: FileNode[] = [];
+        
+        // Check if this node is excluded
+        const isExcluded = 
+            exclusionConfig.global.files.includes(node.name) ||
+            exclusionConfig.global.folders.includes(node.name);
+    
+        // Only add the node if it's selected AND not excluded
+        if (selectedFiles.has(node.path) && !isExcluded) {
+            selected.push(node);
+        }
+    
+        // Recursively check children
+        if (node.children && !exclusionConfig.behaviors.hideContents.includes(node.name)) {
+            node.children.forEach(child => {
+                selected = [...selected, ...getAllSelectedNodes(child)];
+            });
+        }
+    
+        return selected;
+    };
+
+    const handleExcludeFile = (node: FileNode) => {
+        const newConfig = { ...exclusionConfig };
+        if (node.isDirectory) {
+            newConfig.global.folders.push(node.name);
+        } else {
+            newConfig.global.files.push(node.name);
+        }
+        setExclusionConfig(newConfig);
+        
+        // Remove from selected files if it was selected
+        if (selectedFiles.has(node.path)) {
+            const newSelected = new Set(selectedFiles);
+            newSelected.delete(node.path);
+            setSelectedFiles(newSelected);
+        }
+    };
+    
+    const handleIncludeFile = (node: FileNode) => {
+        const newConfig = { ...exclusionConfig };
+        if (node.isDirectory) {
+            newConfig.global.folders = newConfig.global.folders.filter(f => f !== node.name);
+        } else {
+            newConfig.global.files = newConfig.global.files.filter(f => f !== node.name);
+        }
+        newConfig.behaviors.hideContents = newConfig.behaviors.hideContents.filter(f => f !== node.name);
+        setExclusionConfig(newConfig);
+    };
 
     const renderTree = (node: FileNode) => {
         const isChecked = selectedFiles.has(node.path);
@@ -309,53 +528,72 @@ const App: React.FC = () => {
             (child.children && child.children.some(grandChild => selectedFiles.has(grandChild.path)))
         );
         const isLoading = loadingFiles.has(node.path);
-
-        const isExcluded = exclusionConfig.paths.includes(node.name) ||
-                          exclusionConfig.patterns.some(pattern => 
-                              new RegExp('^' + pattern.replace('*', '.*') + '$').test(node.name));
-
+    
+        // Determine file status
+        const getFileStatus = (node: FileNode) => {
+            if (exclusionConfig.global.files.includes(node.name) ||
+                exclusionConfig.global.folders.includes(node.name)) {
+                return 'excluded';
+            }
+            if (exclusionConfig.behaviors.hideContents.includes(node.name)) {
+                return 'hidden';
+            }
+            return 'included';
+        };
+    
+        const status = getFileStatus(node);
+    
         return (
             <TreeItem
                 key={node.path}
                 nodeId={node.path}
                 label={
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <Box sx={{ position: 'relative' }}>
-                            <Checkbox
-                                checked={isChecked}
-                                indeterminate={!isChecked && hasCheckedChildren}
-                                onChange={(e) => handleCheckboxChange(node, e.target.checked)}
-                                onClick={(e) => e.stopPropagation()}
-                                sx={{ 
-                                    '& .MuiCheckbox-root': {
-                                        transition: 'none'
-                                    },
-                                    visibility: isLoading ? 'hidden' : 'visible'
-                                }}
-                            />
-                            {isLoading && (
-                                <CircularProgress
-                                    size={20}
-                                    sx={{
-                                        position: 'absolute',
-                                        top: '50%',
-                                        left: '50%',
-                                        marginTop: '-10px',
-                                        marginLeft: '-10px'
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {status === 'included' && (
+                            <Box sx={{ position: 'relative' }}>
+                                <Checkbox
+                                    checked={isChecked}
+                                    indeterminate={!isChecked && hasCheckedChildren}
+                                    onChange={(e) => handleCheckboxChange(node, e.target.checked)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    sx={{ 
+                                        visibility: isLoading ? 'hidden' : 'visible'
                                     }}
                                 />
-                            )}
-                        </Box>
+                                {isLoading && <CircularProgress size={20} />}
+                            </Box>
+                        )}
                         <Typography 
                             sx={{ 
-                                color: isExcluded ? 'text.disabled' : 'text.primary',
-                                textDecoration: isExcluded ? 'line-through' : 'none'
+                                color: status === 'excluded' ? 'text.disabled' : 'text.primary',
+                                textDecoration: status === 'excluded' ? 'line-through' : 'none',
+                                fontStyle: status === 'hidden' ? 'italic' : 'normal'
                             }}
                         >
                             {node.name}
-                            {exclusionConfig.autoExcludeContents.includes(node.name) && 
-                                " (contents hidden)"}
                         </Typography>
+                        {status !== 'included' && (
+                            <Chip
+                                size="small"
+                                label={status}
+                                color={status === 'excluded' ? 'error' : 'default'}
+                                variant="outlined"
+                                onDelete={() => handleIncludeFile(node)}
+                                sx={{ ml: 1 }}
+                            />
+                        )}
+                        {status === 'included' && (
+                            <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleExcludeFile(node);
+                                }}
+                                sx={{ opacity: 0, '&:hover': { opacity: 1 } }}
+                            >
+                                <BlockIcon fontSize="small" />
+                            </IconButton>
+                        )}
                     </Box>
                 }
             >
@@ -366,59 +604,133 @@ const App: React.FC = () => {
 
     return (
         <Box sx={{ p: 2 }}>
+            {/* Header */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                <Button variant="contained" onClick={handleFolderSelect}>
-                    Select Folder
-                </Button>
-                <IconButton onClick={() => setConfigDialogOpen(true)}>
-                    <SettingsIcon />
-                </IconButton>
-            </Box>
-            
-            {structure && (
-                <>
-                    <TreeView
-                        sx={{ mt: 2 }}
-                        defaultCollapseIcon={<>📂</>}
-                        defaultExpandIcon={<>📁</>}
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button 
+                        variant="contained" 
+                        onClick={handleFolderSelect}
+                        startIcon={<FolderOpenIcon />}
                     >
-                        {renderTree(structure)}
-                    </TreeView>
-                    
-                    <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
-                        <Button 
-                            variant="contained" 
-                            onClick={handleExport}
-                            disabled={selectedFiles.size === 0}
+                        Select Folder
+                    </Button>
+                    {projectContext && (
+                        <Typography 
+                            variant="body1" 
+                            sx={{ 
+                                alignSelf: 'center',
+                                color: 'text.secondary'
+                            }}
                         >
-                            Export Selected Files
-                        </Button>
-                        
-                        <Tooltip title="Copy to Clipboard">
-                            <span>
-                                <Button
-                                    variant="outlined"
-                                    onClick={handleCopyToClipboard}
-                                    disabled={selectedFiles.size === 0}
-                                    startIcon={<ContentCopyIcon />}
-                                >
-                                    Copy to Clipboard
-                                </Button>
-                            </span>
-                        </Tooltip>
-                    </Box>
-                </>
-            )}
+                            {projectContext.name}
+                        </Typography>
+                    )}
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Tooltip title="Manage Presets">
+                        <IconButton 
+                            onClick={() => setPresetDialogOpen(true)}
+                            color={activePreset ? 'primary' : 'default'}
+                        >
+                            <BookmarkIcon />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Exclusion Settings">
+                        <IconButton onClick={() => setConfigDialogOpen(true)}>
+                            <SettingsIcon />
+                        </IconButton>
+                    </Tooltip>
+                </Box>
+            </Box>
 
-            {renderExclusionDialog()}
-            
-            <Snackbar
-                open={snackbarOpen}
-                autoHideDuration={3000}
-                onClose={() => setSnackbarOpen(false)}
-                message={snackbarMessage}
-            />
-        </Box>
+
+        {/* Project Context Display */}
+        {projectContext && (
+            <Paper sx={{ p: 2, mb: 2 }} variant="outlined">
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography variant="subtitle1">Project Info</Typography>
+                    <Chip 
+                        size="small" 
+                        label={projectContext.stack.type}
+                        color="primary"
+                        variant="outlined"
+                    />
+                </Box>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    {projectContext.stack.framework.map(fw => (
+                        <Chip 
+                            key={fw} 
+                            size="small" 
+                            label={fw}
+                            variant="outlined"
+                        />
+                    ))}
+                </Box>
+            </Paper>
+        )}
+
+        {/* File Tree */}
+        {structure && (
+            <>
+                <TreeView
+                    sx={{ mt: 2 }}
+                    defaultCollapseIcon={<>📂</>}
+                    defaultExpandIcon={<>📁</>}
+                >
+                    {renderTree(structure)}
+                </TreeView>
+                
+                {/* Action Buttons */}
+                <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
+                    <Button 
+                        variant="contained" 
+                        onClick={handleExport}
+                        disabled={selectedFiles.size === 0}
+                        startIcon={<SaveIcon />}
+                    >
+                        Export Selected Files
+                    </Button>
+                    
+                    <Tooltip title="Copy to Clipboard">
+                        <span>
+                            <Button
+                                variant="outlined"
+                                onClick={handleCopyToClipboard}
+                                disabled={selectedFiles.size === 0}
+                                startIcon={<ContentCopyIcon />}
+                            >
+                                Copy to Clipboard
+                            </Button>
+                        </span>
+                    </Tooltip>
+
+                    {selectedFiles.size > 0 && (
+                        <Typography 
+                            variant="body2" 
+                            sx={{ 
+                                alignSelf: 'center',
+                                color: 'text.secondary'
+                            }}
+                        >
+                            {selectedFiles.size} file(s) selected
+                        </Typography>
+                    )}
+                </Box>
+            </>
+        )}
+
+        {/* Dialogs */}
+        {renderExclusionDialog()}
+        {renderPresetDialog()}
+        
+        {/* Notifications */}
+        <Snackbar
+            open={snackbarOpen}
+            autoHideDuration={3000}
+            onClose={() => setSnackbarOpen(false)}
+            message={snackbarMessage}
+        />
+    </Box>
     );
 };
 
