@@ -8,26 +8,36 @@ interface UseFileTreeProps {
     onSelectionChange?: (selected: Set<string>) => void;
 }
 
+interface UseFileTreeReturn {
+    selectedFiles: Set<string>;
+    loadingFiles: Set<string>;
+    handleCheckboxChange: (node: FileNode, checked: boolean) => void;
+    isNodeExcluded: (node: FileNode) => boolean;
+    setSelectedFiles: (selected: Set<string>) => void;
+    setLoadingFile: (path: string, isLoading: boolean) => void;
+}
+
 export const useFileTree = ({
     initialSelected = new Set(),
     exclusionConfig,
     onSelectionChange
-}: UseFileTreeProps) => {
+}: UseFileTreeProps): UseFileTreeReturn => {
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(initialSelected);
     const [loadingFiles, setLoadingFiles] = useState<Set<string>>(new Set());
 
     // Check if a node or any of its ancestors are excluded
     const isNodeExcluded = useCallback((node: FileNode): boolean => {
-        // First check if the node itself is excluded
+        // Check node itself
         if (exclusionConfig.global.files.includes(node.name) ||
             exclusionConfig.global.folders.includes(node.name)) {
             return true;
         }
 
-        // Check if any parent folder in the path is excluded
+        // Check ancestors
         const pathParts = node.path.split('/');
         for (let i = 0; i < pathParts.length; i++) {
-            if (exclusionConfig.global.folders.includes(pathParts[i])) {
+            const parentFolder = pathParts[i];
+            if (exclusionConfig.global.folders.includes(parentFolder)) {
                 return true;
             }
         }
@@ -35,18 +45,35 @@ export const useFileTree = ({
         return false;
     }, [exclusionConfig]);
 
-    // Get all selectable descendant paths
+    // Clean up selections when exclusions change
+    useEffect(() => {
+        setSelectedFiles(prev => {
+            const newSelected = new Set(prev);
+            Array.from(newSelected).forEach(path => {
+                const pathNode = { path, name: path.split('/').pop() || '' } as FileNode;
+                if (isNodeExcluded(pathNode)) {
+                    newSelected.delete(path);
+                }
+            });
+            return newSelected;
+        });
+    }, [exclusionConfig, isNodeExcluded]);
+
+    // Get all selectable descendants
     const getSelectableDescendants = useCallback((node: FileNode): string[] => {
-        // If this node is excluded, none of its descendants are selectable
         if (isNodeExcluded(node)) {
             return [];
         }
+
+        let paths: string[] = [];
         
-        let paths: string[] = [node.path];
+        // Only add this node if it's not excluded
+        if (!isNodeExcluded(node)) {
+            paths.push(node.path);
+        }
         
         if (node.children && !exclusionConfig.behaviors.hideContents.includes(node.name)) {
             node.children.forEach(child => {
-                // Only add descendants if they're not excluded
                 if (!isNodeExcluded(child)) {
                     paths = [...paths, ...getSelectableDescendants(child)];
                 }
@@ -57,7 +84,6 @@ export const useFileTree = ({
     }, [exclusionConfig, isNodeExcluded]);
 
     const handleCheckboxChange = useCallback((node: FileNode, checked: boolean) => {
-        // If the node is excluded, don't allow selection
         if (isNodeExcluded(node)) {
             return;
         }
@@ -74,24 +100,18 @@ export const useFileTree = ({
                 }
             });
 
-            // Clean up any selected paths that are now under excluded nodes
-            Array.from(newSelected).forEach(path => {
-                const pathNode = { path, name: path.split('/').pop() || '' } as FileNode;
-                if (isNodeExcluded(pathNode)) {
-                    newSelected.delete(path);
-                }
-            });
-
             return newSelected;
         });
     }, [getSelectableDescendants, isNodeExcluded]);
 
-    // Notify parent component of selection changes
+    // Notify parent of changes
     useEffect(() => {
-        onSelectionChange?.(selectedFiles);
+        if (onSelectionChange) {
+            onSelectionChange(selectedFiles);
+        }
     }, [selectedFiles, onSelectionChange]);
 
-    const setLoading = useCallback((path: string, isLoading: boolean) => {
+    const setLoadingFile = useCallback((path: string, isLoading: boolean) => {
         setLoadingFiles(prev => {
             const next = new Set(prev);
             if (isLoading) {
@@ -107,8 +127,8 @@ export const useFileTree = ({
         selectedFiles,
         loadingFiles,
         handleCheckboxChange,
-        setLoading,
+        isNodeExcluded,
         setSelectedFiles,
-        isNodeExcluded  // Export this to use in UI
+        setLoadingFile
     };
 };

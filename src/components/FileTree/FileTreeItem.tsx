@@ -7,13 +7,12 @@ import {
     Typography, 
     Box, 
     Chip,
-    Tooltip,
-    CircularProgress 
+    Tooltip
 } from '@mui/material';
 import BlockIcon from '@mui/icons-material/Block';
 import FolderIcon from '@mui/icons-material/Folder';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
-import ImageIcon from '@mui/icons-material/Image';  // Fixed import
+import ImageIcon from '@mui/icons-material/Image';
 import { FileNode, ExclusionConfig } from '../../types';
 import { isImageFile } from '../../utils/fileUtils';
 
@@ -26,6 +25,7 @@ interface FileTreeItemProps {
     onCheckboxChange: (node: FileNode, checked: boolean) => void;
     onExclude: (node: FileNode) => void;
     onInclude: (node: FileNode) => void;
+    isNodeExcluded: (node: FileNode) => boolean;  // Add this prop
 }
 
 export const FileTreeItem: React.FC<FileTreeItemProps> = React.memo(({
@@ -36,36 +36,34 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = React.memo(({
     level = 0,
     onCheckboxChange,
     onExclude,
-    onInclude
+    onInclude,
+    isNodeExcluded
 }) => {
-    // Add isImage check
-    const isImage = useMemo(() => isImageFile(node.name), [node.name]);
-
-    // Modify status computation to always treat images as excluded
+    // Compute node status
     const status = useMemo(() => {
-        if (isImage || 
-            exclusionConfig.global.files.includes(node.name) ||
-            exclusionConfig.global.folders.includes(node.name)) {
+        if (isNodeExcluded(node)) {
             return 'excluded';
         }
         if (exclusionConfig.behaviors.hideContents.includes(node.name)) {
             return 'hidden';
         }
         return 'included';
-    }, [node.name, exclusionConfig, isImage]);
+    }, [node, exclusionConfig, isNodeExcluded]);
 
-    // Compute checkbox state
-    const { isChecked, isIndeterminate } = useMemo(() => {
+    // Compute checkbox state considering parent exclusions
+    const { isChecked, isIndeterminate, isDisabled } = useMemo(() => {
         const checked = selectedFiles.has(node.path);
         const hasCheckedChildren = node.children?.some(child => 
             selectedFiles.has(child.path) || 
             child.children?.some(grandChild => selectedFiles.has(grandChild.path))
         );
+        
         return {
             isChecked: checked,
-            isIndeterminate: !checked && hasCheckedChildren
+            isIndeterminate: !checked && hasCheckedChildren,
+            isDisabled: status === 'excluded' || isImageFile(node.name)
         };
-    }, [node, selectedFiles]);
+    }, [node, selectedFiles, status]);
 
     const isLoading = loadingFiles.has(node.path);
 
@@ -79,15 +77,14 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = React.memo(({
         return <InsertDriveFileIcon fontSize="small" sx={{ color: 'action.active' }} />;
     };
 
-    // Render node label
     const renderLabel = () => (
         <Box 
             sx={{ 
                 display: 'flex',
                 alignItems: 'center',
                 ml: level * 2,
-                mr: 2, // Add right margin
-                width: 'calc(100% - 100px)', // Reserve space for right-side elements
+                mr: 2,
+                width: 'calc(100% - 100px)',
             }}
         >
             {/* Left side */}
@@ -95,10 +92,10 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = React.memo(({
                 display: 'flex', 
                 alignItems: 'center', 
                 gap: 1,
-                overflow: 'hidden', // Hide overflow
+                overflow: 'hidden',
                 flex: 1,
             }}>
-                {status === 'included' && (
+                {status !== 'excluded' && (
                     <Checkbox
                         checked={isChecked}
                         indeterminate={isIndeterminate}
@@ -106,9 +103,11 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = React.memo(({
                             e.stopPropagation();
                             onCheckboxChange(node, e.target.checked);
                         }}
+                        disabled={isDisabled}
                         size="small"
                         sx={{ 
                             padding: '4px',
+                            visibility: isDisabled ? 'hidden' : 'visible'
                         }}
                     />
                 )}
@@ -125,46 +124,47 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = React.memo(({
                     {node.name}
                 </Typography>
             </Box>
-    
-            {/* Right side - fixed width */}
+
+            {/* Right side */}
             <Box sx={{ 
-                width: '100px', // Fixed width for actions
+                width: '100px',
                 display: 'flex',
                 justifyContent: 'flex-end',
                 position: 'absolute',
                 right: 8,
             }}>
-                {status !== 'included' && !isImage && (
-                    <Chip
-                        size="small"
-                        label={status}
-                        color={status === 'excluded' ? 'error' : 'default'}
-                        variant="outlined"
-                        onClick={(e) => e.stopPropagation()}
-                        onDelete={(e) => {
-                            e.stopPropagation();
-                            onInclude(node);
-                        }}
-                        sx={{ height: 20 }}
-                    />
+                {status !== 'included' && !isImageFile(node.name) && (
+                    <Tooltip title="Click to include">
+                        <Chip
+                            size="small"
+                            label={status}
+                            color={status === 'excluded' ? 'error' : 'default'}
+                            variant="outlined"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onInclude(node);
+                            }}
+                            sx={{ height: 20 }}
+                        />
+                    </Tooltip>
                 )}
-    
-                {status === 'included' && !isImage && (
-                    <IconButton
-                        size="small"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onExclude(node);
-                        }}
-                        sx={{ 
-                            padding: '2px',
-                        }}
-                    >
-                        <BlockIcon fontSize="small" />
-                    </IconButton>
+
+                {status === 'included' && !isImageFile(node.name) && (
+                    <Tooltip title="Exclude from tree">
+                        <IconButton
+                            size="small"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onExclude(node);
+                            }}
+                            sx={{ padding: '2px' }}
+                        >
+                            <BlockIcon fontSize="small" />
+                        </IconButton>
+                    </Tooltip>
                 )}
-    
-                {isImage && (
+
+                {isImageFile(node.name) && (
                     <Chip
                         size="small"
                         label="Image"
@@ -189,7 +189,8 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = React.memo(({
             sx={{
                 '& .MuiTreeItem-content': {
                     padding: '2px 0',
-                    cursor: node.isDirectory ? 'pointer' : 'default'
+                    cursor: node.isDirectory ? 'pointer' : 'default',
+                    opacity: status === 'excluded' ? 0.6 : 1
                 }
             }}
         >
@@ -204,6 +205,7 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = React.memo(({
                     onCheckboxChange={onCheckboxChange}
                     onExclude={onExclude}
                     onInclude={onInclude}
+                    isNodeExcluded={isNodeExcluded}
                 />
             ))}
         </TreeItem>
