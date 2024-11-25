@@ -3,7 +3,15 @@ import { ExclusionConfig, UserConfig } from '../types';
 
 export const DEFAULT_EXCLUSIONS: ExclusionConfig = {
     global: {
-        files: ['package-lock.json', '*.log', '.DS_Store'],
+        files: [
+            'package-lock.json', 
+            '*.log', 
+            '.DS_Store',
+            // Add image patterns
+            '*.jpg', '*.jpeg', '*.png', '*.gif', 
+            '*.bmp', '*.webp', '*.svg', '*.ico',
+            '*.tiff', '*.tif'
+        ],
         folders: ['node_modules', 'build', 'dist']
     },
     session: {

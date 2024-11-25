@@ -40,6 +40,7 @@ import {
 import { DEFAULT_EXCLUSIONS, DEFAULT_USER_CONFIG } from './constants/defaults';
 import { loadAndMergeConfigs, addRecentProject } from './utils/config';
 
+import { FileTreeView } from './components/FileTree/FilesTreeView';
 interface AppState {
     structure: FileNode | null;
     selectedFiles: Set<string>;
@@ -96,44 +97,6 @@ const App: React.FC = () => {
         }
     };
 
-    const handleCheckboxChange = (node: FileNode, checked: boolean) => {
-        const newSelected = new Set(selectedFiles);
-        const affectedPaths = getAllDescendantPaths(node);
-    
-        affectedPaths.forEach(path => {
-            // Get the node for this path
-            const pathNode = findNodeByPath(structure!, path);
-            if (!pathNode) return;
-    
-            // Check if this node is excluded
-            const isExcluded = 
-                exclusionConfig.global.files.includes(pathNode.name) ||
-                exclusionConfig.global.folders.includes(pathNode.name);
-    
-            // Only allow selection of non-excluded files
-            if (checked && !isExcluded) {
-                newSelected.add(path);
-            } else {
-                newSelected.delete(path);
-            }
-        });
-    
-        setSelectedFiles(newSelected);
-    };
-    
-    // Helper function to find a node by path
-    const findNodeByPath = (root: FileNode, searchPath: string): FileNode | null => {
-        if (root.path === searchPath) return root;
-        if (!root.children) return null;
-        
-        for (const child of root.children) {
-            const found = findNodeByPath(child, searchPath);
-            if (found) return found;
-        }
-        
-        return null;
-    };
-
     const handleFolderSelect = async () => {
         const folderPath = await window.electronAPI.selectFolder();
         if (folderPath) {
@@ -175,15 +138,6 @@ const App: React.FC = () => {
         return fullPath.replace(projectRoot, '').replace(/^\//, '');
     };
     
-    const getAllDescendantPaths = (node: FileNode): string[] => {
-        let paths: string[] = [node.path];
-        if (node.children) {
-            node.children.forEach(child => {
-                paths = [...paths, ...getAllDescendantPaths(child)];
-            });
-        }
-        return paths;
-    };
 
     const handleEditPreset = (preset: SharePreset) => {
         // TODO: Implement preset editing
@@ -255,10 +209,9 @@ const App: React.FC = () => {
             output += `</project-info>\n\n`;
         }
         
-        // Add directory structure (only showing included files)
+        // Add directory structure
         output += "<file-tree>\n";
         const addStructure = (node: FileNode, depth: number = 0) => {
-            // Skip excluded files/folders in the tree view
             const isExcluded = 
                 exclusionConfig.global.files.includes(node.name) ||
                 exclusionConfig.global.folders.includes(node.name);
@@ -278,21 +231,31 @@ const App: React.FC = () => {
         }
         output += "</file-tree>\n\n";
         
-        // Add file contents (only for selected and included files)
+        // Add file contents
         const selectedNodes = nodes.filter(node => {
             const isExcluded = 
                 exclusionConfig.global.files.includes(node.name) ||
                 exclusionConfig.global.folders.includes(node.name);
             return !isExcluded;
         });
-    
+
         for (const node of selectedNodes) {
             if (!node.isDirectory) {
                 const relativePath = getRelativePath(node.path);
                 output += `<${node.name}>\n`;
-                output += `//${relativePath}\n`;
+                
                 try {
                     const content = await window.electronAPI.readFileContent(node.path);
+                    
+                    // Check if the file already starts with its path comment
+                    const expectedComment = `//${relativePath}`;
+                    const hasPathComment = content.trimStart().startsWith(expectedComment);
+                    
+                    // Only add the path comment if it's not already there
+                    if (!hasPathComment) {
+                        output += `${expectedComment}\n`;
+                    }
+                    
                     output += content;
                 } catch (error: unknown) {
                     if (error instanceof Error) {
@@ -306,7 +269,7 @@ const App: React.FC = () => {
                 output += `\n</${node.name}>\n\n`;
             }
         }
-    
+
         output += `</${projectName}>`;
         return output;
     };
@@ -493,114 +456,34 @@ const App: React.FC = () => {
         return selected;
     };
 
-    const handleExcludeFile = (node: FileNode) => {
-        const newConfig = { ...exclusionConfig };
-        if (node.isDirectory) {
-            newConfig.global.folders.push(node.name);
-        } else {
-            newConfig.global.files.push(node.name);
-        }
-        setExclusionConfig(newConfig);
+    // const handleExcludeFile = (node: FileNode) => {
+    //     const newConfig = { ...exclusionConfig };
+    //     if (node.isDirectory) {
+    //         newConfig.global.folders.push(node.name);
+    //     } else {
+    //         newConfig.global.files.push(node.name);
+    //     }
+    //     setExclusionConfig(newConfig);
         
-        // Remove from selected files if it was selected
-        if (selectedFiles.has(node.path)) {
-            const newSelected = new Set(selectedFiles);
-            newSelected.delete(node.path);
-            setSelectedFiles(newSelected);
-        }
-    };
+    //     // Remove from selected files if it was selected
+    //     if (selectedFiles.has(node.path)) {
+    //         const newSelected = new Set(selectedFiles);
+    //         newSelected.delete(node.path);
+    //         setSelectedFiles(newSelected);
+    //     }
+    // };
     
-    const handleIncludeFile = (node: FileNode) => {
-        const newConfig = { ...exclusionConfig };
-        if (node.isDirectory) {
-            newConfig.global.folders = newConfig.global.folders.filter(f => f !== node.name);
-        } else {
-            newConfig.global.files = newConfig.global.files.filter(f => f !== node.name);
-        }
-        newConfig.behaviors.hideContents = newConfig.behaviors.hideContents.filter(f => f !== node.name);
-        setExclusionConfig(newConfig);
-    };
+    // const handleIncludeFile = (node: FileNode) => {
+    //     const newConfig = { ...exclusionConfig };
+    //     if (node.isDirectory) {
+    //         newConfig.global.folders = newConfig.global.folders.filter(f => f !== node.name);
+    //     } else {
+    //         newConfig.global.files = newConfig.global.files.filter(f => f !== node.name);
+    //     }
+    //     newConfig.behaviors.hideContents = newConfig.behaviors.hideContents.filter(f => f !== node.name);
+    //     setExclusionConfig(newConfig);
+    // };
 
-    const renderTree = (node: FileNode) => {
-        const isChecked = selectedFiles.has(node.path);
-        const hasCheckedChildren = node.children?.some(child => 
-            selectedFiles.has(child.path) || 
-            (child.children && child.children.some(grandChild => selectedFiles.has(grandChild.path)))
-        );
-        const isLoading = loadingFiles.has(node.path);
-    
-        // Determine file status
-        const getFileStatus = (node: FileNode) => {
-            if (exclusionConfig.global.files.includes(node.name) ||
-                exclusionConfig.global.folders.includes(node.name)) {
-                return 'excluded';
-            }
-            if (exclusionConfig.behaviors.hideContents.includes(node.name)) {
-                return 'hidden';
-            }
-            return 'included';
-        };
-    
-        const status = getFileStatus(node);
-    
-        return (
-            <TreeItem
-                key={node.path}
-                nodeId={node.path}
-                label={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {status === 'included' && (
-                            <Box sx={{ position: 'relative' }}>
-                                <Checkbox
-                                    checked={isChecked}
-                                    indeterminate={!isChecked && hasCheckedChildren}
-                                    onChange={(e) => handleCheckboxChange(node, e.target.checked)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    sx={{ 
-                                        visibility: isLoading ? 'hidden' : 'visible'
-                                    }}
-                                />
-                                {isLoading && <CircularProgress size={20} />}
-                            </Box>
-                        )}
-                        <Typography 
-                            sx={{ 
-                                color: status === 'excluded' ? 'text.disabled' : 'text.primary',
-                                textDecoration: status === 'excluded' ? 'line-through' : 'none',
-                                fontStyle: status === 'hidden' ? 'italic' : 'normal'
-                            }}
-                        >
-                            {node.name}
-                        </Typography>
-                        {status !== 'included' && (
-                            <Chip
-                                size="small"
-                                label={status}
-                                color={status === 'excluded' ? 'error' : 'default'}
-                                variant="outlined"
-                                onDelete={() => handleIncludeFile(node)}
-                                sx={{ ml: 1 }}
-                            />
-                        )}
-                        {status === 'included' && (
-                            <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleExcludeFile(node);
-                                }}
-                                sx={{ opacity: 0, '&:hover': { opacity: 1 } }}
-                            >
-                                <BlockIcon fontSize="small" />
-                            </IconButton>
-                        )}
-                    </Box>
-                }
-            >
-                {node.children?.map((child) => renderTree(child))}
-            </TreeItem>
-        );
-    };
 
     return (
         <Box sx={{ p: 2 }}>
@@ -672,15 +555,18 @@ const App: React.FC = () => {
         {/* File Tree */}
         {structure && (
             <>
-                <TreeView
-                    sx={{ mt: 2 }}
-                    defaultCollapseIcon={<>📂</>}
-                    defaultExpandIcon={<>📁</>}
-                >
-                    {renderTree(structure)}
-                </TreeView>
+                <FileTreeView
+                    structure={structure}
+                    exclusionConfig={exclusionConfig}
+                    onSelectionChange={(newSelected) => {
+                        setSelectedFiles(newSelected);
+                    }}
+                    onExclusionChange={(newConfig) => {
+                        setExclusionConfig(newConfig);
+                    }}
+                />
                 
-                {/* Action Buttons */}
+                {/* Action Buttons - keep this section the same */}
                 <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
                     <Button 
                         variant="contained" 
