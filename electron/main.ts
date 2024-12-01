@@ -10,7 +10,8 @@ import {
     SharePreset, 
     GlobalExclusions, 
     UserConfig,
-    FileError
+    FileError,
+    PromptConfig
 } from '../src/types';
 
 // Default configurations
@@ -32,7 +33,14 @@ const DEFAULT_CONFIG: ExclusionConfig = {
     }
 };
 
-
+const DEFAULT_PROMPT_CONFIG: PromptConfig = {
+    includeFileTree: true,
+    includeIdentity: false,
+    includeProject: true,
+    includeTask: false,
+    addFileHeaders: true,
+    generatePseudocode: false
+};
 
 function createWindow() {
     const win = new BrowserWindow({
@@ -264,3 +272,53 @@ ipcMain.handle('delete-preset', async (_, presetId: string) => {
     }
 });
 
+
+// Prompt handling
+ipcMain.handle('save-prompt', async (_, content: string, projectRoot: string) => {
+    const filePath = path.join(projectRoot, 'aireadme.txt');
+    try {
+        await fs.promises.writeFile(filePath, content, 'utf8');
+        return true;
+    } catch (error) {
+        console.error('Error saving prompt:', error);
+        throw error;
+    }
+});
+
+ipcMain.handle('add-file-headers', async (_, files: { path: string; content: string }[]) => {
+    try {
+        await Promise.all(files.map(async (file) => {
+            const header = `//${file.path}\n`;
+            if (!file.content.startsWith(header)) {
+                await fs.promises.writeFile(file.path, header + file.content, 'utf8');
+            }
+        }));
+        return true;
+    } catch (error) {
+        console.error('Error adding file headers:', error);
+        throw error;
+    }
+});
+
+// Configuration handling
+ipcMain.handle('save-prompt-config', async (_, config: PromptConfig) => {
+    const configPath = path.join(app.getPath('userData'), 'prompt-config.json');
+    try {
+        await fs.promises.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
+        return true;
+    } catch (error) {
+        console.error('Error saving prompt config:', error);
+        throw error;
+    }
+});
+
+ipcMain.handle('load-prompt-config', async () => {
+    const configPath = path.join(app.getPath('userData'), 'prompt-config.json');
+    try {
+        const config = await fs.promises.readFile(configPath, 'utf8');
+        return JSON.parse(config);
+    } catch (error) {
+        console.error('Error loading prompt config:', error);
+        return DEFAULT_PROMPT_CONFIG;
+    }
+});

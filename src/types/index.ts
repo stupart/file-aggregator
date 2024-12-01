@@ -1,9 +1,24 @@
 // src/types/index.ts
-export * from './file';
-export * from './exclusions';
-export * from './project';
-export * from './presets';
-export * from './output';
-export * from './electron';
-export * from './errors';
-export * from './config';
+// Export all types
+export type { FileNode } from './file';
+export type { 
+    GlobalExclusions,
+    SessionExclusions,
+    FolderBehaviors,
+    ExclusionConfig 
+} from './exclusions';
+export type { 
+    ProjectStack,
+    ProjectContext 
+} from './project';
+export type { SharePreset } from './presets';
+export type { OutputFormat } from './output';
+export type { FileError } from './errors';
+export type { 
+    UserConfig,
+    PromptConfig 
+} from './config';
+export type { 
+    PromptSection,
+    PromptOptions 
+} from './prompt';

@@ -5,5 +5,6 @@ export interface FileNode {
     isDirectory: boolean;
     children?: FileNode[];
     selected: boolean;
-    status?: 'included' | 'excluded' | 'hidden';  // Add this
+    status?: 'included' | 'excluded' | 'hidden';
+    content?: string;  // Add this for file contents
 }
