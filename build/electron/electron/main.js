@@ -96,6 +96,14 @@ var DEFAULT_CONFIG = {
         summarize: []
     }
 };
+var DEFAULT_PROMPT_CONFIG = {
+    includeFileTree: true,
+    includeIdentity: false,
+    includeProject: true,
+    includeTask: false,
+    addFileHeaders: true,
+    generatePseudocode: false
+};
 function createWindow() {
     var win = new electron_1.BrowserWindow({
         width: 800,
@@ -415,6 +423,103 @@ electron_1.ipcMain.handle('delete-preset', function (_, presetId) { return __awa
                 _a = _b.sent();
                 throw new Error('Failed to delete preset');
             case 5: return [2 /*return*/];
+        }
+    });
+}); });
+// Prompt handling
+electron_1.ipcMain.handle('save-prompt', function (_, content, projectRoot) { return __awaiter(void 0, void 0, void 0, function () {
+    var filePath, error_3;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                filePath = path.join(projectRoot, 'aireadme.txt');
+                _a.label = 1;
+            case 1:
+                _a.trys.push([1, 3, , 4]);
+                return [4 /*yield*/, fs.promises.writeFile(filePath, content, 'utf8')];
+            case 2:
+                _a.sent();
+                return [2 /*return*/, true];
+            case 3:
+                error_3 = _a.sent();
+                console.error('Error saving prompt:', error_3);
+                throw error_3;
+            case 4: return [2 /*return*/];
+        }
+    });
+}); });
+electron_1.ipcMain.handle('add-file-headers', function (_, files) { return __awaiter(void 0, void 0, void 0, function () {
+    var error_4;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                _a.trys.push([0, 2, , 3]);
+                return [4 /*yield*/, Promise.all(files.map(function (file) { return __awaiter(void 0, void 0, void 0, function () {
+                        var header;
+                        return __generator(this, function (_a) {
+                            switch (_a.label) {
+                                case 0:
+                                    header = "//".concat(file.path, "\n");
+                                    if (!!file.content.startsWith(header)) return [3 /*break*/, 2];
+                                    return [4 /*yield*/, fs.promises.writeFile(file.path, header + file.content, 'utf8')];
+                                case 1:
+                                    _a.sent();
+                                    _a.label = 2;
+                                case 2: return [2 /*return*/];
+                            }
+                        });
+                    }); }))];
+            case 1:
+                _a.sent();
+                return [2 /*return*/, true];
+            case 2:
+                error_4 = _a.sent();
+                console.error('Error adding file headers:', error_4);
+                throw error_4;
+            case 3: return [2 /*return*/];
+        }
+    });
+}); });
+// Configuration handling
+electron_1.ipcMain.handle('save-prompt-config', function (_, config) { return __awaiter(void 0, void 0, void 0, function () {
+    var configPath, error_5;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                configPath = path.join(electron_1.app.getPath('userData'), 'prompt-config.json');
+                _a.label = 1;
+            case 1:
+                _a.trys.push([1, 3, , 4]);
+                return [4 /*yield*/, fs.promises.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8')];
+            case 2:
+                _a.sent();
+                return [2 /*return*/, true];
+            case 3:
+                error_5 = _a.sent();
+                console.error('Error saving prompt config:', error_5);
+                throw error_5;
+            case 4: return [2 /*return*/];
+        }
+    });
+}); });
+electron_1.ipcMain.handle('load-prompt-config', function () { return __awaiter(void 0, void 0, void 0, function () {
+    var configPath, config, error_6;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                configPath = path.join(electron_1.app.getPath('userData'), 'prompt-config.json');
+                _a.label = 1;
+            case 1:
+                _a.trys.push([1, 3, , 4]);
+                return [4 /*yield*/, fs.promises.readFile(configPath, 'utf8')];
+            case 2:
+                config = _a.sent();
+                return [2 /*return*/, JSON.parse(config)];
+            case 3:
+                error_6 = _a.sent();
+                console.error('Error loading prompt config:', error_6);
+                return [2 /*return*/, DEFAULT_PROMPT_CONFIG];
+            case 4: return [2 /*return*/];
         }
     });
 }); });

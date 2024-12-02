@@ -11,7 +11,7 @@ import {
     TextField,
     Chip
 } from '@mui/material';
-import { ExclusionConfig } from '../../types';
+import { ExclusionConfig } from '../../../types';
 
 interface ExclusionDialogProps {
     open: boolean;

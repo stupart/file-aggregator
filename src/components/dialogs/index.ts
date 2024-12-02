@@ -1,3 +1,3 @@
 // src/components/dialogs/index.ts
-export * from './ExclusionDialog';
+export * from './PromptConfigDialog/ExclusionDialog';
 export * from './PresetDialog';

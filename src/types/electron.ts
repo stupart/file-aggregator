@@ -32,9 +32,21 @@ declare global {
             
             // Existing preset and project operations
             savePreset: (preset: SharePreset) => Promise<void>;
-            loadPresets: () => Promise<SharePreset[]>;
             deletePreset: (presetId: string) => Promise<boolean>;
             analyzeProject: (path: string) => Promise<ProjectContext>;
+            loadPresets: () => Promise<Array<{
+                id: string;
+                name: string;
+                description: string;
+                exclusions: ExclusionConfig;
+                outputFormat: any; 
+                includeContext: {
+                    stack: boolean;
+                    description: boolean;
+                    dependencies: boolean;
+                    scripts: boolean;
+                };
+            }>>;
         }
     }
 }

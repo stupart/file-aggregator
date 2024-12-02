@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
     Box,
     Button,
@@ -16,10 +16,10 @@ import BookmarkIcon from '@mui/icons-material/Bookmark';
 import SettingsIcon from '@mui/icons-material/Settings';
 import SaveIcon from '@mui/icons-material/Save';
 
-import { FileNode, PromptConfig } from './types';
+import { ExclusionConfig, FileNode, OutputFormat, PromptConfig } from './types';
 import { DEFAULT_EXCLUSIONS, DEFAULT_USER_CONFIG } from './constants/defaults';
 import { FileTreeView } from './components/FileTree/FilesTreeView';
-import { ExclusionDialog, PresetDialog } from './components/dialogs';
+import { PromptConfigDialog } from './components/dialogs/PromptConfigDialog';
 
 // Custom hooks
 import { useServices } from './hooks/useServices';
@@ -27,7 +27,25 @@ import { useProjectManager } from './hooks/useProjectManager';
 import { usePromptGeneration } from './hooks/usePromptGeneration';
 import { useUIState } from './hooks/useUIState';
 import { usePresetManager } from './hooks/usePresetManager';
-import { PromptConfigDialog } from './components/dialogs/PromptConfigDialog';
+import { loadAndMergeConfigs } from './utils/config';
+
+// Constants
+const DEFAULT_OUTPUT_FORMAT: OutputFormat = {
+    destination: 'AIREADME.txt',
+    format: {
+        includeProjectContext: true,
+        includeFileTree: true,
+        fileComments: true,
+        separators: true,
+        maxFileSize: undefined
+    },
+    header: {
+        title: undefined,
+        description: undefined,
+        customSections: {}
+    }
+};
+
 
 const App: React.FC = () => {
     // Configuration State
@@ -68,6 +86,11 @@ const App: React.FC = () => {
     const [promptDialogOpen, setPromptDialogOpen] = useState(false);
     const [identity, setIdentity] = useState('');
     const [task, setTask] = useState('');
+    const [exclusionPresets, setExclusionPresets] = useState<Array<{
+        id: string;
+        name: string;
+        config: ExclusionConfig;
+    }>>([]);
 
 
     // Preset Management
@@ -98,13 +121,34 @@ const App: React.FC = () => {
     );
 
     // Load initial configurations
-    React.useEffect(() => {
-        configManager.loadPromptConfig().then(config => {
-            // Handle prompt config loading
-        }).catch(error => {
-            console.error('Failed to load prompt config:', error);
-            showSnackbar('Failed to load settings');
-        });
+    useEffect(() => {
+        const loadConfigurations = async () => {
+            try {
+                // Load all configurations
+                const [baseConfigs, promptCfg, presets] = await Promise.all([
+                    loadAndMergeConfigs(),
+                    configManager.loadPromptConfig(),
+                    window.electronAPI.loadPresets()
+                ]);
+                
+                setExclusionConfig(baseConfigs.exclusions);
+                setUserConfig(baseConfigs.userConfig);
+                setPromptConfig(promptCfg);
+                
+                // Transform presets
+                setExclusionPresets(presets.map(preset => ({
+                    id: preset.id,
+                    name: preset.name,
+                    config: preset.exclusions
+                })));
+
+            } catch (error) {
+                console.error('Failed to load configurations:', error);
+                showSnackbar('Failed to load settings');
+            }
+        };
+
+        loadConfigurations();
     }, [configManager]);
 
     // Handlers
@@ -171,48 +215,67 @@ const App: React.FC = () => {
         return selected;
     };
 
-    return (
-        <Box sx={{ p: 2 }}>
-            {/* Header */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Tooltip title="Prompt Settings">
-                        <IconButton onClick={() => setPromptDialogOpen(true)}>
-                            <SettingsIcon />
-                        </IconButton>
-                    </Tooltip>
-                    <Button 
-                        variant="contained" 
-                        onClick={handleFolderSelect}
-                        startIcon={<FolderOpenIcon />}
-                    >
-                        Select Folder
-                    </Button>
-                    {projectContext && (
-                        <Typography 
-                            variant="body1" 
-                            sx={{ alignSelf: 'center', color: 'text.secondary' }}
+    // Handler for saving new exclusion presets
+    const handleSaveExclusionPreset = async (name: string, config: ExclusionConfig) => {
+        try {
+            const newPreset = {
+                id: `preset-${Date.now()}`,
+                name,
+                config
+            };
+
+            await window.electronAPI.savePreset({
+                id: newPreset.id,
+                name: newPreset.name,
+                description: `Exclusion preset: ${name}`,
+                exclusions: config,
+                outputFormat: DEFAULT_OUTPUT_FORMAT, // Use the default format
+                includeContext: {
+                    stack: true,
+                    description: true,
+                    dependencies: true,
+                    scripts: true
+                }
+            });
+
+            setExclusionPresets(prev => [...prev, newPreset]);
+            showSnackbar('Preset saved successfully');
+        } catch (error) {
+            console.error('Failed to save preset:', error);
+            showSnackbar('Failed to save preset');
+        }
+    };
+        
+
+        return (
+            <Box sx={{ p: 2 }}>
+                {/* Header */}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Button 
+                            variant="contained" 
+                            onClick={handleFolderSelect}
+                            startIcon={<FolderOpenIcon />}
                         >
-                            {projectContext.name}
-                        </Typography>
-                    )}
+                            Select Folder
+                        </Button>
+                        {projectContext && (
+                            <Typography 
+                                variant="body1" 
+                                sx={{ alignSelf: 'center', color: 'text.secondary' }}
+                            >
+                                {projectContext.name}
+                            </Typography>
+                        )}
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Tooltip title="Prompt & Exclusion Settings">
+                            <IconButton onClick={() => setPromptDialogOpen(true)}>
+                                <SettingsIcon />
+                            </IconButton>
+                        </Tooltip>
+                    </Box>
                 </Box>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Tooltip title="Manage Presets">
-                        <IconButton 
-                            onClick={() => setPresetDialogOpen(true)}
-                            color={activePreset ? 'primary' : 'default'}
-                        >
-                            <BookmarkIcon />
-                        </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Exclusion Settings">
-                        <IconButton onClick={() => setConfigDialogOpen(true)}>
-                            <SettingsIcon />
-                        </IconButton>
-                    </Tooltip>
-                </Box>
-            </Box>
 
             {/* Project Context Display */}
             {projectContext && (
@@ -285,24 +348,7 @@ const App: React.FC = () => {
                 </>
             )}
 
-            {/* Dialogs */}
-            <ExclusionDialog
-                open={configDialogOpen}
-                onClose={() => setConfigDialogOpen(false)}
-                exclusionConfig={exclusionConfig}
-                onExclusionChange={setExclusionConfig}
-            />
-            
-            <PresetDialog
-                open={presetDialogOpen}
-                onClose={() => setPresetDialogOpen(false)}
-                presets={presets}
-                activePreset={activePreset}
-                onPresetSelect={handlePresetSelect}
-                onEditPreset={handleEditPreset}
-                onCreatePreset={handleCreatePreset}
-            />
-
+            {/* Configuration Dialog */}
             <PromptConfigDialog
                 open={promptDialogOpen}
                 onClose={() => setPromptDialogOpen(false)}
@@ -312,6 +358,10 @@ const App: React.FC = () => {
                 onIdentityChange={setIdentity}
                 task={task}
                 onTaskChange={setTask}
+                exclusionConfig={exclusionConfig}
+                onExclusionChange={setExclusionConfig}
+                exclusionPresets={exclusionPresets}
+                onSaveExclusionPreset={handleSaveExclusionPreset}
             />
             
             {/* Notifications */}
@@ -321,7 +371,6 @@ const App: React.FC = () => {
                 onClose={() => setSnackbarOpen(false)}
                 message={snackbarMessage}
             />
-
         </Box>
     );
 };
