@@ -38,35 +38,44 @@ interface PromptConfigDialogProps {
     onClose: () => void;
     config: PromptConfig;
     onConfigChange: (config: PromptConfig) => void;
-    identity: string;
-    onIdentityChange: (identity: string) => void;
-    task: string;
-    onTaskChange: (task: string) => void;
     exclusionConfig: ExclusionConfig;
     onExclusionChange: (config: ExclusionConfig) => void;
     exclusionPresets: Array<{ id: string; name: string; config: ExclusionConfig }>;
     onSaveExclusionPreset: (name: string, config: ExclusionConfig) => void;
 }
 
+
 export const PromptConfigDialog: React.FC<PromptConfigDialogProps> = ({
     open,
     onClose,
     config,
     onConfigChange,
-    identity,
-    onIdentityChange,
-    task,
-    onTaskChange,
     exclusionConfig,
     onExclusionChange,
     exclusionPresets,
     onSaveExclusionPreset,
 }) => {
 
+
+    // Update handlers to modify the config directly
     const handleToggle = (key: keyof PromptConfig) => {
         onConfigChange({
             ...config,
             [key]: !config[key]
+        });
+    };
+
+    const handleIdentityChange = (value: string) => {
+        onConfigChange({
+            ...config,
+            identity: value
+        });
+    };
+
+    const handleTaskChange = (value: string) => {
+        onConfigChange({
+            ...config,
+            task: value
         });
     };
 
@@ -75,16 +84,16 @@ export const PromptConfigDialog: React.FC<PromptConfigDialogProps> = ({
     const generatePreview = (): string => {
         let preview = '';
         
-        if (config.includeIdentity && identity) {
-            preview += `<identity>\n${identity}\n</identity>\n\n`;
+        if (config.includeIdentity && config.identity) {
+            preview += `<identity>\n${config.identity}\n</identity>\n\n`;
         }
         
         if (config.includeProject) {
             preview += `<project>\n[Project context will be included]\n</project>\n\n`;
         }
         
-        if (config.includeTask && task) {
-            preview += `<task>\n${task}\n</task>\n\n`;
+        if (config.includeTask && config.task) {
+            preview += `<task>\n${config.task}\n</task>\n\n`;
         }
         
         if (config.includeFileTree) {
@@ -93,6 +102,7 @@ export const PromptConfigDialog: React.FC<PromptConfigDialogProps> = ({
         
         return preview;
     };
+    
 
     return (
         <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -108,7 +118,7 @@ export const PromptConfigDialog: React.FC<PromptConfigDialogProps> = ({
                         >
                             <PreviewIcon />
                         </IconButton>
-                    </Tooltip>
+                    </Tooltip> 
                 </Box>
             </DialogTitle>
             <DialogContent>
@@ -137,8 +147,8 @@ export const PromptConfigDialog: React.FC<PromptConfigDialogProps> = ({
                                 fullWidth
                                 multiline
                                 rows={3}
-                                value={identity}
-                                onChange={(e) => onIdentityChange(e.target.value)}
+                                value={config.identity || ''}
+                                onChange={(e) => handleIdentityChange(e.target.value)}
                                 placeholder="E.g., You are an experienced software architect with expertise in..."
                                 variant="outlined"
                                 size="small"
@@ -193,8 +203,8 @@ export const PromptConfigDialog: React.FC<PromptConfigDialogProps> = ({
                                 fullWidth
                                 multiline
                                 rows={3}
-                                value={task}
-                                onChange={(e) => onTaskChange(e.target.value)}
+                                value={config.task || ''}
+                                onChange={(e) => handleTaskChange(e.target.value)}
                                 placeholder="E.g., Review this code for potential security vulnerabilities..."
                                 variant="outlined"
                                 size="small"
@@ -301,6 +311,7 @@ export const PromptConfigDialog: React.FC<PromptConfigDialogProps> = ({
                         onSavePreset={onSaveExclusionPreset}
                     />
                 </Box>
+                
             </DialogContent>
             <DialogActions>
                 <Button onClick={onClose}>Close</Button>

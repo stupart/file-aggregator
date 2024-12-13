@@ -4,6 +4,8 @@ export interface PromptConfig {
     includeIdentity: boolean;
     includeProject: boolean;
     includeTask: boolean;
+    task?: string;  // Add this
+    identity?: string;  // Add this
     addFileHeaders: boolean;
     generatePseudocode: boolean;
 }

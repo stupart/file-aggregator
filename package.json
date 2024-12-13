@@ -1,7 +1,7 @@
 {
   "name": "file-aggregator",
   "version": "1.0.0",
-  "main": "build/electron/main.js",
+  "main": "build/electron/electron/main.js",
   "scripts": {
     "start": "concurrently \"npm run start:react\" \"npm run start:electron\"",
     "start:react": "BROWSER=none react-scripts start",

@@ -26,8 +26,9 @@ export const usePresetManager = (onExclusionChange: (config: ExclusionConfig) =>
 
     return {
         activePreset,
+        setActivePreset,  // Add this
         presets,
-        setPresets,
+        setPresets,      // Add this
         handlePresetSelect,
         handleEditPreset,
         handleCreatePreset

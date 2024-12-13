@@ -10,6 +10,10 @@ export class PromptBuilder {
     this.projectRoot = projectRoot;
   }
 
+  public clearSections(): void {
+    this.sections = [];
+  }   
+
   public addIdentity(identity: string): void {
     this.sections.push({
       type: 'identity',
@@ -130,8 +134,11 @@ ${context.description ? `\nDescription: ${context.description}` : ''}`;
 
   private formatFiles(files: FileNode[]): string {
     return files.map(file => {
-      const relativePath = file.path.replace(this.projectRoot, '').replace(/^\//, '');
-      return `<${file.name}>\n//${relativePath}\n${file.content || ''}\n</${file.name}>\n\n`;
+        const relativePath = file.path.replace(this.projectRoot, '')
+            .replace(/^[/\\]+/, ''); // Remove leading slashes/backslashes
+        const header = `//${relativePath}`;
+        return `<${file.name}>\n${header}\n${file.content || ''}\n</${file.name}>\n\n`;
     }).join('');
   }
 }
+

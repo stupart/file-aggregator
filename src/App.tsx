@@ -8,18 +8,30 @@ import {
     IconButton,
     Snackbar,
     Paper,
-    Chip
+    Chip,
+    FormControl,
+    Select,
+    MenuItem
 } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import SettingsIcon from '@mui/icons-material/Settings';
 import SaveIcon from '@mui/icons-material/Save';
+import CommentIcon from '@mui/icons-material/Comment'; 
 
-import { ExclusionConfig, FileNode, OutputFormat, PromptConfig } from './types';
+import { 
+    ExclusionConfig, 
+    FileNode, 
+    OutputFormat, 
+    PromptConfig,
+    SharePreset  // Add this
+} from './types';
+
 import { DEFAULT_EXCLUSIONS, DEFAULT_USER_CONFIG } from './constants/defaults';
 import { FileTreeView } from './components/FileTree/FilesTreeView';
 import { PromptConfigDialog } from './components/dialogs/PromptConfigDialog';
+import { PresetManagementDialog } from './components/dialogs/PresetManagementDialog';
 
 // Custom hooks
 import { useServices } from './hooks/useServices';
@@ -51,11 +63,13 @@ const App: React.FC = () => {
     // Configuration State
     const [exclusionConfig, setExclusionConfig] = React.useState(DEFAULT_EXCLUSIONS);
     const [userConfig, setUserConfig] = React.useState(DEFAULT_USER_CONFIG);
-    const [promptConfig, setPromptConfig] = React.useState<PromptConfig>({
+    const [promptConfig, setPromptConfig] = useState<PromptConfig>({
         includeFileTree: true,
         includeIdentity: false,
         includeProject: true,
         includeTask: false,
+        task: '',           // Include task in config
+        identity: '',       // Include identity in config
         addFileHeaders: true,
         generatePseudocode: false
     });
@@ -84,8 +98,8 @@ const App: React.FC = () => {
     } = useUIState();
 
     const [promptDialogOpen, setPromptDialogOpen] = useState(false);
-    const [identity, setIdentity] = useState('');
-    const [task, setTask] = useState('');
+    // const [identity, setIdentity] = useState('');
+    // const [task, setTask] = useState<string>('');
     const [exclusionPresets, setExclusionPresets] = useState<Array<{
         id: string;
         name: string;
@@ -96,11 +110,13 @@ const App: React.FC = () => {
     // Preset Management
     const {
         activePreset,
+        setActivePreset,  // Add this
         presets,
+        setPresets,      // Add this
         handlePresetSelect,
         handleEditPreset,
         handleCreatePreset
-    } = usePresetManager(setExclusionConfig); 
+    } = usePresetManager(setExclusionConfig);
 
     // File Selection and Generation
     const {
@@ -215,6 +231,46 @@ const App: React.FC = () => {
         return selected;
     };
 
+    const handleAddFileHeaders = async () => {
+        if (!structure || !projectRoot) return;
+        
+        try {
+            const selectedNodes = getAllSelectedNodes(structure);
+            const results = await fileOps.addFileHeaders(selectedNodes);
+            
+            // Show results
+            const messages = [];
+            if (results.modified.length > 0) {
+                messages.push(`Added headers to ${results.modified.length} files`);
+            }
+            if (results.skipped.length > 0) {
+                messages.push(`${results.skipped.length} files already had headers`);
+            }
+            if (results.errors.length > 0) {
+                console.error('Errors adding headers:', results.errors);
+                messages.push(`Failed to add headers to ${results.errors.length} files`);
+            }
+
+            showSnackbar(messages.join('. '));
+        } catch (error) {
+            console.error('Failed to add file headers:', error);
+            showSnackbar('Failed to add file headers');
+        }
+    };
+
+    const handlePresetSave = async (preset: SharePreset) => {
+        try {
+            await window.electronAPI.savePreset(preset);
+            const updatedPresets = await window.electronAPI.loadPresets();
+            setPresets(updatedPresets);
+            showSnackbar('Preset saved successfully');
+        } catch (error) {
+            console.error('Failed to save preset:', error);
+            showSnackbar('Failed to save preset');
+        }
+    };
+
+
     // Handler for saving new exclusion presets
     const handleSaveExclusionPreset = async (name: string, config: ExclusionConfig) => {
         try {
@@ -246,6 +302,21 @@ const App: React.FC = () => {
         }
     };
         
+    const handlePresetDelete = async (presetId: string) => {
+        try {
+            await window.electronAPI.deletePreset(presetId);
+            const updatedPresets = await window.electronAPI.loadPresets();
+            setPresets(updatedPresets);
+            if (activePreset === presetId) {
+                setActivePreset(null);
+            }
+            showSnackbar('Preset deleted successfully');
+        } catch (error) {
+            console.error('Failed to delete preset:', error);
+            showSnackbar('Failed to delete preset');
+        }
+    };
+
 
         return (
             <Box sx={{ p: 2 }}>
@@ -259,6 +330,14 @@ const App: React.FC = () => {
                         >
                             Select Folder
                         </Button>
+                        <Button
+                            variant="outlined"
+                            onClick={handleAddFileHeaders}
+                            disabled={selectedFiles.size === 0}
+                            startIcon={<CommentIcon />}
+                        >
+                            Add File Headers
+                        </Button>
                         {projectContext && (
                             <Typography 
                                 variant="body1" 
@@ -268,7 +347,36 @@ const App: React.FC = () => {
                             </Typography>
                         )}
                     </Box>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
+                    {/* Replace this right-side box with our new implementation */}
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                        {/* Add Preset Selector */}
+                        <FormControl size="small" sx={{ minWidth: 200 }}>
+                            <Select
+                                value={activePreset || ''}
+                                onChange={(e) => handlePresetSelect(e.target.value)}
+                                displayEmpty
+                                sx={{ bgcolor: 'background.paper' }}
+                            >
+                                <MenuItem value="">
+                                    <em>No Preset Selected</em>
+                                </MenuItem>
+                                {presets.map((preset) => (
+                                    <MenuItem key={preset.id} value={preset.id}>
+                                        {preset.name}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                        
+                        {/* Existing Buttons */}
+                        <Tooltip title="Manage Presets">
+                            <IconButton 
+                                onClick={() => setPresetDialogOpen(true)}
+                                color={activePreset ? 'primary' : 'default'}
+                            >
+                                <BookmarkIcon />
+                            </IconButton>
+                        </Tooltip>
                         <Tooltip title="Prompt & Exclusion Settings">
                             <IconButton onClick={() => setPromptDialogOpen(true)}>
                                 <SettingsIcon />
@@ -353,15 +461,21 @@ const App: React.FC = () => {
                 open={promptDialogOpen}
                 onClose={() => setPromptDialogOpen(false)}
                 config={promptConfig}
-                onConfigChange={setPromptConfig}
-                identity={identity}
-                onIdentityChange={setIdentity}
-                task={task}
-                onTaskChange={setTask}
+                onConfigChange={setPromptConfig}  // Changed from separate handlers
                 exclusionConfig={exclusionConfig}
                 onExclusionChange={setExclusionConfig}
                 exclusionPresets={exclusionPresets}
                 onSaveExclusionPreset={handleSaveExclusionPreset}
+            />
+            <PresetManagementDialog
+                open={presetDialogOpen}
+                onClose={() => setPresetDialogOpen(false)}
+                presets={presets}
+                activePreset={activePreset}
+                currentConfig={exclusionConfig}
+                onPresetSelect={handlePresetSelect}
+                onPresetSave={handlePresetSave}
+                onPresetDelete={handlePresetDelete}
             />
             
             {/* Notifications */}

@@ -5,6 +5,7 @@ import { FileOperations } from '../services/FileOperations';
 import { ConfigurationManager } from '../services/ConfigurationManager';
 
 export const useServices = (projectRoot: string) => {
+    // Create a single fileOps instance that persists
     const fileOps = useMemo(() => new FileOperations(window.electronAPI), []);
     const configManager = useMemo(() => new ConfigurationManager(window.electronAPI), []);
     const promptBuilder = useMemo(() => 

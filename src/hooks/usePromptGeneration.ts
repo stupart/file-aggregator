@@ -26,12 +26,12 @@ export const usePromptGeneration = (
     const [loadingFiles, setLoadingFiles] = useState<Set<string>>(new Set());
     const [generatedContent, setGeneratedContent] = useState<string>('');
 
-    const generatePromptContent = useCallback(async (selectedNodes: FileNode[]): Promise<string> => {
+    const generatePromptContent = async (selectedNodes: FileNode[]): Promise<string> => {
         if (!promptBuilder || !structure || !projectContext) {
             throw new Error('Project not properly initialized');
         }
 
-        // Load file contents
+        // Add files to the builder
         const nodesWithContent = await Promise.all(
             selectedNodes.map(async (node) => {
                 if (!node.isDirectory) {
@@ -41,23 +41,39 @@ export const usePromptGeneration = (
                 return node;
             })
         );
-
-        // Build prompt
+    
+        // Clear previous sections
+        promptBuilder.clearSections(); // Add this method to PromptBuilder
+    
+        // Add sections based on config
+        if (promptConfig.includeIdentity && promptConfig.identity) {
+            promptBuilder.addIdentity(promptConfig.identity);
+        }
+        
+        if (promptConfig.includeProject) {
+            promptBuilder.addProject(projectContext);
+        }
+        
+        if (promptConfig.includeTask && promptConfig.task) {
+            promptBuilder.addTask(promptConfig.task);
+        }
+    
         if (promptConfig.includeFileTree) {
             promptBuilder.addFileTree(structure);
         }
-
+    
         promptBuilder.addFiles(nodesWithContent);
-
-        const projectName = projectRoot.split('/').pop() || 'project';
-        return await promptBuilder.generatePrompt({
-            projectName,
+    
+        // Generate the prompt with all options
+        return promptBuilder.generatePrompt({
+            projectName: projectRoot.split('/').pop() || 'project',
             projectContext: promptConfig.includeProject ? projectContext : undefined,
-            selectedFiles: nodesWithContent,
+            identity: promptConfig.includeIdentity ? promptConfig.identity : undefined,
+            task: promptConfig.includeTask ? promptConfig.task : undefined,
             includeFileTree: promptConfig.includeFileTree
         });
-    }, [promptBuilder, structure, projectContext, projectRoot, promptConfig, fileOps]);
-
+    };
+    
     return {
         selectedFiles,
         setSelectedFiles,

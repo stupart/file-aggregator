@@ -100,8 +100,11 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = React.memo(({
                         checked={isChecked}
                         indeterminate={isIndeterminate}
                         onChange={(e) => {
-                            e.stopPropagation();
+                            e.stopPropagation();  // Add this
                             onCheckboxChange(node, e.target.checked);
+                        }}
+                        onClick={(e) => {         // Add this
+                            e.stopPropagation();
                         }}
                         disabled={isDisabled}
                         size="small"
