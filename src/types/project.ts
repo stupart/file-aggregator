@@ -1,4 +1,5 @@
-// src/types/project.ts
+//src/types/project.ts
+
 export interface ProjectStack {
     type: 'react' | 'node' | 'electron' | 'vue' | 'angular' | string;
     framework: string[];

@@ -1,4 +1,4 @@
-// src/types/errors.ts
+//src/types/errors.ts
 export interface FileError {
     message: string;
     path: string;

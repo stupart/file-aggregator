@@ -1,5 +1,3 @@
-// src/services/PromptBuilder.ts
-
 import { FileNode, ProjectContext, PromptSection, PromptOptions } from '../types';
 
 export class PromptBuilder {
@@ -57,25 +55,8 @@ export class PromptBuilder {
   }
 
   public async generatePrompt(options: PromptOptions): Promise<string> {
-    const { projectName, identity, task } = options;
-    let output = `<${projectName}-codebase>\n\n`;
-
-    // Add identity if present
-    if (identity) {
-        output += `<identity>\n${identity}\n</identity>\n\n`;
-    }
-
-    // Add project context if present
-    if (options.projectContext) {
-        output += `<project>\n${this.formatProjectContext(options.projectContext)}\n</project>\n\n`;
-    }
-
-    // Add task if present
-    if (task) {
-        output += `<task>\n${task}\n</task>\n\n`;
-    }
-    
-    // Add sections in specific order
+    // Removed the project name wrapper
+    let output = '';
     const orderedTypes: PromptSection['type'][] = [
       'identity',
       'project',
@@ -83,15 +64,12 @@ export class PromptBuilder {
       'fileTree',
       'files'
     ];
-
     for (const type of orderedTypes) {
       const section = this.sections.find(s => s.type === type);
       if (section && (!section.optional || this.shouldIncludeSection(type, options))) {
         output += section.content;
       }
     }
-
-    output += `</${projectName}-codebase>`;
     return output;
   }
 
@@ -122,23 +100,20 @@ ${context.description ? `\nDescription: ${context.description}` : ''}`;
   private generateFileTree(node: FileNode, depth: number = 0): string {
     const indent = '  '.repeat(depth);
     let output = `${indent}${node.path}\n`;
-
     if (node.children) {
       for (const child of node.children) {
         output += this.generateFileTree(child, depth + 1);
       }
     }
-
     return output;
   }
 
   private formatFiles(files: FileNode[]): string {
     return files.map(file => {
         const relativePath = file.path.replace(this.projectRoot, '')
-            .replace(/^[/\\]+/, ''); // Remove leading slashes/backslashes
+            .replace(/^[/\\]+/, '');
         const header = `//${relativePath}`;
         return `<${file.name}>\n${header}\n${file.content || ''}\n</${file.name}>\n\n`;
     }).join('');
   }
 }
-

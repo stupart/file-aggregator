@@ -1,4 +1,4 @@
-// src/services/FileOperations.ts
+//src/services/FileOperations.ts
 import { FileNode } from '../types';
 
 export class FileOperations {

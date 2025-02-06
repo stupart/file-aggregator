@@ -1,4 +1,4 @@
-// src/constants/defaults.ts
+//src/constants/defaults.ts
 import { ExclusionConfig, UserConfig } from '../types';
 
 export const DEFAULT_EXCLUSIONS: ExclusionConfig = {

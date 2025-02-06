@@ -1,4 +1,4 @@
-// src/components/FileTree/useFileTree.ts
+//src/components/FileTree/useFileTree.ts
 import { useState, useCallback, useEffect } from 'react';
 import { FileNode, ExclusionConfig } from '../../types';
 

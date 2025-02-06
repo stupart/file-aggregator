@@ -73,37 +73,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-// electron/main.ts
+/* electron/main.ts */
 var electron_1 = require("electron");
 var path = __importStar(require("path"));
 var fs = __importStar(require("fs"));
 var electron_is_dev_1 = __importDefault(require("electron-is-dev"));
-var projectAnalyzer_1 = require("../src/utils/projectAnalyzer");
-// Default configurations
-var DEFAULT_EXCLUSIONS = {
-    files: ['package-lock.json', '*.log', '.DS_Store'],
-    folders: ['node_modules', 'build', 'dist']
-};
-var DEFAULT_CONFIG = {
-    global: DEFAULT_EXCLUSIONS,
-    session: {
-        files: [],
-        folders: []
-    },
-    behaviors: {
-        hideContents: ['node_modules'],
-        showEmpty: [],
-        summarize: []
-    }
-};
-var DEFAULT_PROMPT_CONFIG = {
-    includeFileTree: true,
-    includeIdentity: false,
-    includeProject: true,
-    includeTask: false,
-    addFileHeaders: true,
-    generatePseudocode: false
-};
+var projectAnalyzer_1 = require("./utils/projectAnalyzer");
+var defaultUnifiedConfig_1 = require("../src/constants/defaultUnifiedConfig");
 function createWindow() {
     var win = new electron_1.BrowserWindow({
         width: 800,
@@ -114,7 +90,6 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js')
         }
     });
-    // Load the app
     if (electron_is_dev_1.default) {
         win.loadURL('http://localhost:3001');
         win.webContents.openDevTools();
@@ -124,25 +99,18 @@ function createWindow() {
     }
 }
 electron_1.app.whenReady().then(createWindow);
-electron_1.app.on('window-all-closed', function () {
-    if (process.platform !== 'darwin') {
-        electron_1.app.quit();
-    }
-});
-electron_1.app.on('activate', function () {
-    if (electron_1.BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
-    }
-});
-// IPC Handlers
+electron_1.app.on('window-all-closed', function () { if (process.platform !== 'darwin')
+    electron_1.app.quit(); });
+electron_1.app.on('activate', function () { if (electron_1.BrowserWindow.getAllWindows().length === 0)
+    createWindow(); });
+// ---------------------
 // File System Handlers
+// ---------------------
 electron_1.ipcMain.handle('select-folder', function () { return __awaiter(void 0, void 0, void 0, function () {
     var result;
     return __generator(this, function (_a) {
         switch (_a.label) {
-            case 0: return [4 /*yield*/, electron_1.dialog.showOpenDialog({
-                    properties: ['openDirectory']
-                })];
+            case 0: return [4 /*yield*/, electron_1.dialog.showOpenDialog({ properties: ['openDirectory'] })];
             case 1:
                 result = _a.sent();
                 return [2 /*return*/, result.canceled ? null : result.filePaths[0]];
@@ -150,52 +118,41 @@ electron_1.ipcMain.handle('select-folder', function () { return __awaiter(void 0
     });
 }); });
 electron_1.ipcMain.handle('scan-directory', function (_, folderPath) { return __awaiter(void 0, void 0, void 0, function () {
-    var config, scanDir;
+    var unifiedConfig, exclusionConfig, scanDir;
     return __generator(this, function (_a) {
         switch (_a.label) {
-            case 0: return [4 /*yield*/, loadConfig()];
+            case 0: return [4 /*yield*/, loadUnifiedConfig()];
             case 1:
-                config = _a.sent();
-                scanDir = function (path) { return __awaiter(void 0, void 0, void 0, function () {
-                    var stats, name, node, children, _a, _b;
-                    return __generator(this, function (_c) {
-                        switch (_c.label) {
-                            case 0: return [4 /*yield*/, fs.promises.stat(path)];
+                unifiedConfig = _a.sent();
+                exclusionConfig = unifiedConfig.exclusions;
+                scanDir = function (filePath) { return __awaiter(void 0, void 0, void 0, function () {
+                    var stats, name, node, childrenNames, filteredNames, children;
+                    return __generator(this, function (_a) {
+                        switch (_a.label) {
+                            case 0: return [4 /*yield*/, fs.promises.stat(filePath)];
                             case 1:
-                                stats = _c.sent();
-                                name = path.split('/').pop() || '';
-                                node = {
-                                    path: path,
-                                    name: name,
-                                    isDirectory: stats.isDirectory(),
-                                    selected: false
-                                };
-                                if (!node.isDirectory) {
+                                stats = _a.sent();
+                                name = filePath.split('/').pop() || '';
+                                node = { path: filePath, name: name, isDirectory: stats.isDirectory(), selected: false };
+                                if (!node.isDirectory)
                                     return [2 /*return*/, node];
-                                }
-                                // Handle directory behaviors
-                                if (config.behaviors.hideContents.includes(name)) {
+                                if (exclusionConfig.behaviors.hideContents.includes(name) || exclusionConfig.behaviors.showEmpty.includes(name)) {
                                     return [2 /*return*/, __assign(__assign({}, node), { children: [] })];
                                 }
-                                if (config.behaviors.showEmpty.includes(name)) {
-                                    return [2 /*return*/, __assign(__assign({}, node), { children: [] })];
-                                }
-                                if (!!config.global.folders.includes(name)) return [3 /*break*/, 4];
-                                _b = (_a = Promise).all;
-                                return [4 /*yield*/, fs.promises.readdir(path)];
-                            case 2: return [4 /*yield*/, _b.apply(_a, [(_c.sent())
-                                        .filter(function (childName) {
-                                        // Filter out excluded files and patterns
-                                        var isExcludedFile = config.global.files.includes(childName);
-                                        var matchesPattern = config.global.files.some(function (pattern) {
-                                            return pattern.includes('*') &&
-                                                new RegExp('^' + pattern.replace('*', '.*') + '$').test(childName);
-                                        });
-                                        return !isExcludedFile && !matchesPattern;
-                                    })
-                                        .map(function (child) { return scanDir("".concat(path, "/").concat(child)); })])];
+                                if (!!exclusionConfig.global.folders.includes(name)) return [3 /*break*/, 4];
+                                return [4 /*yield*/, fs.promises.readdir(filePath)];
+                            case 2:
+                                childrenNames = _a.sent();
+                                filteredNames = childrenNames.filter(function (childName) {
+                                    var isExcludedFile = exclusionConfig.global.files.includes(childName);
+                                    var matchesPattern = exclusionConfig.global.files.some(function (pattern) {
+                                        return pattern.includes('*') && new RegExp('^' + pattern.replace('*', '.*') + '$').test(childName);
+                                    });
+                                    return !isExcludedFile && !matchesPattern;
+                                });
+                                return [4 /*yield*/, Promise.all(filteredNames.map(function (child) { return scanDir("".concat(filePath, "/").concat(child)); }))];
                             case 3:
-                                children = _c.sent();
+                                children = _a.sent();
                                 return [2 /*return*/, __assign(__assign({}, node), { children: children })];
                             case 4: return [2 /*return*/, node];
                         }
@@ -205,9 +162,9 @@ electron_1.ipcMain.handle('scan-directory', function (_, folderPath) { return __
         }
     });
 }); });
-electron_1.ipcMain.handle('analyze-project', function (_, path) { return __awaiter(void 0, void 0, void 0, function () {
+electron_1.ipcMain.handle('analyze-project', function (_, folderPath) { return __awaiter(void 0, void 0, void 0, function () {
     return __generator(this, function (_a) {
-        return [2 /*return*/, (0, projectAnalyzer_1.analyzeProject)(path)];
+        return [2 /*return*/, (0, projectAnalyzer_1.analyzeProject)(folderPath)];
     });
 }); });
 electron_1.ipcMain.handle('read-file-content', function (_, filePath) { return __awaiter(void 0, void 0, void 0, function () {
@@ -225,13 +182,12 @@ electron_1.ipcMain.handle('read-file-content', function (_, filePath) { return _
                     path: filePath,
                     code: error_1 instanceof Error && 'code' in error_1 ? error_1.code : undefined
                 };
-                console.error("Error reading file:", fileError);
+                console.error('Error reading file:', fileError);
                 throw fileError;
             case 3: return [2 /*return*/];
         }
     });
 }); });
-// Export Handlers
 electron_1.ipcMain.handle('export-files', function (_, content, defaultFileName) { return __awaiter(void 0, void 0, void 0, function () {
     var result;
     return __generator(this, function (_a) {
@@ -269,50 +225,15 @@ electron_1.ipcMain.handle('write-file', function (_, filePath, content) { return
         }
     });
 }); });
-// Configuration Handlers
-var getConfigPath = function () { return path.join(electron_1.app.getPath('userData'), 'config.json'); };
-var getPresetsPath = function () { return path.join(electron_1.app.getPath('userData'), 'presets.json'); };
-function loadConfig() {
-    return __awaiter(this, void 0, void 0, function () {
-        var configPath, config, _a;
-        return __generator(this, function (_b) {
-            switch (_b.label) {
-                case 0:
-                    _b.trys.push([0, 2, , 3]);
-                    configPath = getConfigPath();
-                    return [4 /*yield*/, fs.promises.readFile(configPath, 'utf8')];
-                case 1:
-                    config = _b.sent();
-                    return [2 /*return*/, JSON.parse(config)];
-                case 2:
-                    _a = _b.sent();
-                    return [2 /*return*/, DEFAULT_CONFIG];
-                case 3: return [2 /*return*/];
-            }
-        });
-    });
-}
-electron_1.ipcMain.handle('save-config', function (_, config) { return __awaiter(void 0, void 0, void 0, function () {
-    var configPath;
-    return __generator(this, function (_a) {
-        switch (_a.label) {
-            case 0:
-                configPath = getConfigPath();
-                return [4 /*yield*/, fs.promises.writeFile(configPath, JSON.stringify(config, null, 2))];
-            case 1:
-                _a.sent();
-                return [2 /*return*/];
-        }
-    });
-}); });
-electron_1.ipcMain.handle('load-config', loadConfig);
+// ---------------------
 // Preset Handlers
+// ---------------------
 electron_1.ipcMain.handle('save-preset', function (_, preset) { return __awaiter(void 0, void 0, void 0, function () {
     var presetsPath, presets, existing, _a, index;
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
-                presetsPath = getPresetsPath();
+                presetsPath = path.join(electron_1.app.getPath('userData'), 'presets.json');
                 presets = [];
                 _b.label = 1;
             case 1:
@@ -346,67 +267,27 @@ electron_1.ipcMain.handle('load-presets', function () { return __awaiter(void 0,
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
-                _b.trys.push([0, 2, , 3]);
-                presetsPath = getPresetsPath();
-                return [4 /*yield*/, fs.promises.readFile(presetsPath, 'utf8')];
+                presetsPath = path.join(electron_1.app.getPath('userData'), 'presets.json');
+                _b.label = 1;
             case 1:
+                _b.trys.push([1, 3, , 4]);
+                return [4 /*yield*/, fs.promises.readFile(presetsPath, 'utf8')];
+            case 2:
                 presets = _b.sent();
                 return [2 /*return*/, JSON.parse(presets)];
-            case 2:
+            case 3:
                 _a = _b.sent();
                 return [2 /*return*/, []];
-            case 3: return [2 /*return*/];
+            case 4: return [2 /*return*/];
         }
     });
 }); });
-// User Config Handlers
-var getUserConfigPath = function () { return path.join(electron_1.app.getPath('userData'), 'user-config.json'); };
-var DEFAULT_USER_CONFIG = {
-    theme: 'system',
-    maxRecentProjects: 10,
-    recentProjects: []
-};
-function loadUserConfig() {
-    return __awaiter(this, void 0, void 0, function () {
-        var configPath, config, _a;
-        return __generator(this, function (_b) {
-            switch (_b.label) {
-                case 0:
-                    _b.trys.push([0, 2, , 3]);
-                    configPath = getUserConfigPath();
-                    return [4 /*yield*/, fs.promises.readFile(configPath, 'utf8')];
-                case 1:
-                    config = _b.sent();
-                    return [2 /*return*/, JSON.parse(config)];
-                case 2:
-                    _a = _b.sent();
-                    return [2 /*return*/, DEFAULT_USER_CONFIG];
-                case 3: return [2 /*return*/];
-            }
-        });
-    });
-}
-electron_1.ipcMain.handle('save-user-config', function (_, config) { return __awaiter(void 0, void 0, void 0, function () {
-    var configPath;
-    return __generator(this, function (_a) {
-        switch (_a.label) {
-            case 0:
-                configPath = getUserConfigPath();
-                return [4 /*yield*/, fs.promises.writeFile(configPath, JSON.stringify(config, null, 2))];
-            case 1:
-                _a.sent();
-                return [2 /*return*/];
-        }
-    });
-}); });
-electron_1.ipcMain.handle('load-user-config', loadUserConfig);
-// Add delete preset handler
 electron_1.ipcMain.handle('delete-preset', function (_, presetId) { return __awaiter(void 0, void 0, void 0, function () {
     var presetsPath, existing, presets, _a;
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
-                presetsPath = getPresetsPath();
+                presetsPath = path.join(electron_1.app.getPath('userData'), 'presets.json');
                 _b.label = 1;
             case 1:
                 _b.trys.push([1, 4, , 5]);
@@ -426,7 +307,9 @@ electron_1.ipcMain.handle('delete-preset', function (_, presetId) { return __awa
         }
     });
 }); });
-// Prompt handling
+// ---------------------
+// Prompt Handlers
+// ---------------------
 electron_1.ipcMain.handle('save-prompt', function (_, content, projectRoot) { return __awaiter(void 0, void 0, void 0, function () {
     var filePath, error_3;
     return __generator(this, function (_a) {
@@ -480,46 +363,49 @@ electron_1.ipcMain.handle('add-file-headers', function (_, files) { return __awa
         }
     });
 }); });
-// Configuration handling
-electron_1.ipcMain.handle('save-prompt-config', function (_, config) { return __awaiter(void 0, void 0, void 0, function () {
-    var configPath, error_5;
+// ---------------------
+// Unified Configuration Handlers
+// ---------------------
+var getUnifiedConfigPath = function () { return path.join(electron_1.app.getPath('userData'), 'aireadme-config.json'); };
+function loadUnifiedConfig() {
+    return __awaiter(this, void 0, void 0, function () {
+        var configPath, content, _a;
+        return __generator(this, function (_b) {
+            switch (_b.label) {
+                case 0:
+                    configPath = getUnifiedConfigPath();
+                    _b.label = 1;
+                case 1:
+                    _b.trys.push([1, 4, , 6]);
+                    return [4 /*yield*/, fs.promises.access(configPath)];
+                case 2:
+                    _b.sent();
+                    return [4 /*yield*/, fs.promises.readFile(configPath, 'utf8')];
+                case 3:
+                    content = _b.sent();
+                    return [2 /*return*/, JSON.parse(content)];
+                case 4:
+                    _a = _b.sent();
+                    return [4 /*yield*/, fs.promises.writeFile(configPath, JSON.stringify(defaultUnifiedConfig_1.DEFAULT_UNIFIED_CONFIG, null, 2))];
+                case 5:
+                    _b.sent();
+                    return [2 /*return*/, defaultUnifiedConfig_1.DEFAULT_UNIFIED_CONFIG];
+                case 6: return [2 /*return*/];
+            }
+        });
+    });
+}
+electron_1.ipcMain.handle('load-unified-config', loadUnifiedConfig);
+electron_1.ipcMain.handle('save-unified-config', function (_, config) { return __awaiter(void 0, void 0, void 0, function () {
+    var configPath;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                configPath = path.join(electron_1.app.getPath('userData'), 'prompt-config.json');
-                _a.label = 1;
+                configPath = getUnifiedConfigPath();
+                return [4 /*yield*/, fs.promises.writeFile(configPath, JSON.stringify(config, null, 2))];
             case 1:
-                _a.trys.push([1, 3, , 4]);
-                return [4 /*yield*/, fs.promises.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8')];
-            case 2:
                 _a.sent();
                 return [2 /*return*/, true];
-            case 3:
-                error_5 = _a.sent();
-                console.error('Error saving prompt config:', error_5);
-                throw error_5;
-            case 4: return [2 /*return*/];
-        }
-    });
-}); });
-electron_1.ipcMain.handle('load-prompt-config', function () { return __awaiter(void 0, void 0, void 0, function () {
-    var configPath, config, error_6;
-    return __generator(this, function (_a) {
-        switch (_a.label) {
-            case 0:
-                configPath = path.join(electron_1.app.getPath('userData'), 'prompt-config.json');
-                _a.label = 1;
-            case 1:
-                _a.trys.push([1, 3, , 4]);
-                return [4 /*yield*/, fs.promises.readFile(configPath, 'utf8')];
-            case 2:
-                config = _a.sent();
-                return [2 /*return*/, JSON.parse(config)];
-            case 3:
-                error_6 = _a.sent();
-                console.error('Error loading prompt config:', error_6);
-                return [2 /*return*/, DEFAULT_PROMPT_CONFIG];
-            case 4: return [2 /*return*/];
         }
     });
 }); });

@@ -1,3 +1,4 @@
+//src/utils/fileUtils.ts
 // src/utils/fileUtils.ts
 export const IMAGE_EXTENSIONS = new Set([
     'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 

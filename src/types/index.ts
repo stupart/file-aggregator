@@ -1,4 +1,4 @@
-// src/types/index.ts
+//src/types/index.ts
 // Export all types
 export type { FileNode } from './file';
 export type { 

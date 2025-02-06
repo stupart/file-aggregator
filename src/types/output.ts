@@ -1,4 +1,4 @@
-// src/types/output.ts
+//src/types/output.ts
 export interface OutputFormat {
     destination: 'clipboard' | 'AIREADME.txt' | 'custom';
     customPath?: string;

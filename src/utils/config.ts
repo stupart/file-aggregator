@@ -1,4 +1,5 @@
-// src/utils/config.ts
+//src/utils/config.ts
+
 import { ExclusionConfig, UserConfig, SharePreset } from '../types';
 
 export async function loadAndMergeConfigs() {

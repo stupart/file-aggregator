@@ -1,4 +1,5 @@
-// src/types/prompt.ts
+//src/types/prompt.ts
+
 import { FileNode } from './file';
 import { ProjectContext } from './project';
 

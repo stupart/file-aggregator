@@ -1,4 +1,5 @@
-// src/types/presets.ts
+//src/types/presets.ts
+
 import { ExclusionConfig } from './exclusions';
 import { OutputFormat } from './output';
 

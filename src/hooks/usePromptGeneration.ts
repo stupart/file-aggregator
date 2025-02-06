@@ -1,4 +1,4 @@
-// src/hooks/usePromptGeneration.ts
+//src/hooks/usePromptGeneration.ts
 import { useState, useCallback } from 'react';
 import { FileNode, PromptConfig, ProjectContext } from '../types';
 import { PromptBuilder } from '../services/PromptBuilder';

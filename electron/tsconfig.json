@@ -4,15 +4,17 @@
     "module": "commonjs",
     "sourceMap": true,
     "strict": true,
+    "rootDir": "../",
     "outDir": "../build/electron",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
+    "jsx": "react",      
     "typeRoots": [
       "../node_modules/@types"
     ]
   },
   "include": [
-    ".",
-    "../src/types/**/*"
+    "**/*.ts",
+   "../src/**/*.ts"
   ]
 }

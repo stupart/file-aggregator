@@ -20,11 +20,12 @@
       "noEmit": true,
       "jsx": "react-jsx",
       "baseUrl": ".",
-      "paths": {
-        "@/*": ["src/*"]
-      }
+      "paths": {  
+          "@/*": ["src/*"],
+          "@types/*": ["src/types/*"]
+        }
     },
     "include": [
-      "src"
-    ]
+      "src", 
+      "electron/utils/projectAnalyzer.ts"    ]
   }

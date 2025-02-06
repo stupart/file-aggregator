@@ -1,4 +1,4 @@
-// src/hooks/useProjectManager.ts
+//src/hooks/useProjectManager.ts
 import { useState, useCallback } from 'react';
 import { FileNode, ProjectContext } from '../types';
 import { addRecentProject } from '../utils/config';

@@ -1,4 +1,4 @@
-// src/components/FileTree/FileTreeItem.tsx
+//src/components/FileTree/FileTreeItem.tsx
 import React, { useMemo } from 'react';
 import { TreeItem } from '@mui/x-tree-view';
 import { 

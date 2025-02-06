@@ -1,4 +1,4 @@
-// src/components/FileTree/FilesTreeView.tsx
+//src/components/FileTree/FilesTreeView.tsx
 import React from 'react';
 import { TreeView } from '@mui/x-tree-view';
 import { FileTreeItem } from './FileTreeItem';

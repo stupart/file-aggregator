@@ -1,4 +1,4 @@
-// src/hooks/usePresetManager.ts
+//src/hooks/usePresetManager.ts
 import { useState, useCallback } from 'react';
 import { SharePreset, ExclusionConfig } from '../types';
 

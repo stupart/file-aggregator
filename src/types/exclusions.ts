@@ -1,3 +1,4 @@
+//src/types/exclusions.ts
 // src/types/exclusions.ts
 export interface GlobalExclusions {
     files: string[];      // e.g., "package-lock.json", "*.log"

@@ -1,4 +1,5 @@
-// src/types/config.ts
+//src/types/config.ts
+
 export interface PromptConfig {
     includeFileTree: boolean;
     includeIdentity: boolean;
